@@ -17,10 +17,7 @@ export const supabase = createBrowserClient(
 
 async function checkConnection() {
   // Select a dummy value to test the database network connection
-  const { data, error } = await supabase
-    .from("your_table_name")
-    .select("id")
-    .limit(1);
+  const { data, error } = await supabase.from("coba").select("id").limit(1);
 
   if (error) {
     console.error("❌ Connection failed:", error.message);
