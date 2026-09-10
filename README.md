@@ -15,6 +15,7 @@
    ```
    NEXT_PUBLIC_SUPABASE_URL=your-project-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   NEXT_PUBLIC_BUSINESS_WA_NUMBER=your-wa-number
    ```
 5. `npm install && npm run dev`
 
