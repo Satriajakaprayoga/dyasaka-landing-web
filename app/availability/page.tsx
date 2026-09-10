@@ -1,7 +1,7 @@
-import { AvailabilityCalendar } from '@/components/AvailabilityCalendar';
+import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 
 export const metadata = {
-  title: 'Ketersediaan Tanggal | Balloon Party Planner',
+  title: "Ketersediaan Tanggal | Balloon Party Planner",
 };
 
 export default function AvailabilityPage() {
@@ -11,7 +11,7 @@ export default function AvailabilityPage() {
       <p className="text-gray-500 mb-6">
         Cek tanggal yang masih tersedia sebelum menghubungi kami via WhatsApp.
       </p>
-      <AvailabilityCalendar monthsAhead={3} />
+      <AvailabilityCalendar monthsAhead={7} />
     </main>
   );
 }

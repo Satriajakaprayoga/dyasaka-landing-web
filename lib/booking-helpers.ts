@@ -1,5 +1,5 @@
-import { supabase } from './supabase';
-import type { DateCapacity } from './types';
+import { supabase } from "./supabase";
+import type { DateCapacity } from "./types";
 
 /**
  * Returns capacity info for a date range so the calendar UI can
@@ -7,13 +7,13 @@ import type { DateCapacity } from './types';
  */
 export async function getDateCapacityRange(
   startDate: string,
-  endDate: string
+  endDate: string,
 ): Promise<Record<string, DateCapacity>> {
   const { data, error } = await supabase
-    .from('date_capacity')
-    .select('*')
-    .gte('event_date', startDate)
-    .lte('event_date', endDate);
+    .from("date_capacity")
+    .select("*")
+    .gte("event_date", startDate)
+    .lte("event_date", endDate);
 
   if (error) throw error;
 
@@ -21,6 +21,7 @@ export async function getDateCapacityRange(
   for (const row of data ?? []) {
     map[row.event_date] = row as DateCapacity;
   }
+
   return map;
 }
 
@@ -28,7 +29,7 @@ export async function getDateCapacityRange(
 export function isDateAvailable(
   date: string,
   capacityMap: Record<string, DateCapacity>,
-  defaultCapacity = 1
+  defaultCapacity = 1,
 ): boolean {
   const row = capacityMap[date];
   if (!row) return true;
@@ -50,7 +51,7 @@ export function buildWhatsAppInquiryLink(params: {
   const { phoneNumber, productName, preferredDate } = params;
   const message =
     `Halo, saya tertarik dengan paket "${productName}".` +
-    (preferredDate ? `\nTanggal yang diinginkan: ${preferredDate}` : '') +
+    (preferredDate ? `\nTanggal yang diinginkan: ${preferredDate}` : "") +
     `\nMohon info lebih lanjut. Terima kasih!`;
 
   return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
