@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Category } from "@/lib/types";
 import {
@@ -9,30 +10,17 @@ import {
   btnPrimary,
   inputClass,
 } from "@/components/admin/ui";
-import { PlusIcon, TagIcon } from "@/components/admin/icons";
+import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/admin/icons";
 
 export default function CategoriesPage() {
+  const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingId, setLoadingId] = useState<string | null>(null);
-
-  async function handleRemoveCategory(id: string) {
-    const category = categories.find((c) => c.id === id);
-    if (!confirm(`Hapus kategori "${category?.name}"?`)) return;
-
-    setLoadingId(id);
-    const { error } = await supabase.from("categories").delete().eq("id", id);
-    setLoadingId(null);
-
-    if (error) {
-      setError(error.message ?? "Failed to remove category");
-      return;
-    }
-
-    loadCategories();
-  }
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   async function loadCategories() {
     const { data } = await supabase
@@ -46,7 +34,7 @@ export default function CategoriesPage() {
     loadCategories();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -61,12 +49,72 @@ export default function CategoriesPage() {
 
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error ?? "Failed to create category");
+      setError(body.error ?? "Gagal menambah kategori");
       return;
     }
 
     setName("");
     loadCategories();
+  }
+
+  function startEdit(c: Category) {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+  }
+
+  async function handleRename(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+
+    setBusyId(editingId);
+    setError(null);
+
+    const res = await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editingId, name: editName }),
+    });
+    setBusyId(null);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Gagal mengubah kategori");
+      return;
+    }
+
+    cancelEdit();
+    loadCategories();
+    router.refresh();
+  }
+
+  async function handleDelete(c: Category) {
+    if (!confirm(`Hapus kategori "${c.name}"?`)) return;
+
+    setBusyId(c.id);
+    setError(null);
+
+    const res = await fetch(`/api/admin/categories?id=${c.id}`, {
+      method: "DELETE",
+    });
+    setBusyId(null);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(
+        body.error ??
+          "Gagal menghapus kategori (pastikan tidak masih dipakai produk)",
+      );
+      return;
+    }
+
+    loadCategories();
+    router.refresh();
   }
 
   return (
@@ -81,7 +129,7 @@ export default function CategoriesPage() {
       </div>
 
       <Card className="mb-4 p-4">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleCreate} className="flex gap-2">
           <input
             type="text"
             placeholder="Nama kategori baru"
@@ -114,25 +162,65 @@ export default function CategoriesPage() {
                 key={c.id}
                 className="flex items-center justify-between gap-3 px-4 py-3"
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
                     <TagIcon className="h-4 w-4" />
                   </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {c.name}
-                    </p>
-                    <p className="truncate text-xs text-gray-400">{c.slug}</p>
-                  </div>
+                  {editingId === c.id ? (
+                    <form onSubmit={handleRename} className="flex flex-1 gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className={inputClass + " py-1.5"}
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={busyId === c.id}
+                        className="shrink-0 rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {busyId === c.id ? "…" : "Simpan"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100"
+                      >
+                        Batal
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        {c.name}
+                      </p>
+                      <p className="truncate text-xs text-gray-400">{c.slug}</p>
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveCategory(c.id)}
-                  disabled={loadingId === c.id}
-                  className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                >
-                  {loadingId === c.id ? "Menghapus…" : "Hapus"}
-                </button>
+                {editingId !== c.id && (
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(c)}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                      Ubah
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(c)}
+                      disabled={busyId === c.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      {busyId === c.id ? "…" : "Hapus"}
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
