@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,6 +10,7 @@ import type {
 import VariantsPanel from "@/components/admin/VariantsPanel";
 import { BackLink, Badge, Breadcrumbs } from "@/components/admin/ui";
 import { PencilIcon } from "@/components/admin/icons";
+import { VariantsPanelSkeleton } from "@/components/admin/skeletons";
 
 export default async function ItemDetailPage({
   params,
@@ -28,27 +30,6 @@ export default async function ItemDetailPage({
   }
 
   const variants = (item.item_variants ?? []) as ItemVariant[];
-  const variantIds = variants.map((v) => v.id);
-
-  const [movementsRes, pricesRes] = await Promise.all([
-    variantIds.length
-      ? supabase
-          .from("stock_movements")
-          .select("*")
-          .in("item_variant_id", variantIds)
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [] }),
-    variantIds.length
-      ? supabase
-          .from("item_price_history")
-          .select("*")
-          .in("item_variant_id", variantIds)
-          .order("effective_from", { ascending: false })
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const movements = (movementsRes.data ?? []) as StockMovement[];
-  const priceHistory = (pricesRes.data ?? []) as ItemPriceHistory[];
 
   return (
     <div>
@@ -88,12 +69,49 @@ export default async function ItemDetailPage({
         </Link>
       </div>
 
-      <VariantsPanel
-        itemId={item.id}
-        variants={variants}
-        movements={movements}
-        priceHistory={priceHistory}
-      />
+      <Suspense fallback={<VariantsPanelSkeleton />}>
+        <VariantsSection itemId={item.id} variants={variants} />
+      </Suspense>
     </div>
+  );
+}
+
+async function VariantsSection({
+  itemId,
+  variants,
+}: {
+  itemId: string;
+  variants: ItemVariant[];
+}) {
+  const supabase = createServerSupabase();
+  const variantIds = variants.map((v) => v.id);
+
+  const [movementsRes, pricesRes] = await Promise.all([
+    variantIds.length
+      ? supabase
+          .from("stock_movements")
+          .select("*")
+          .in("item_variant_id", variantIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    variantIds.length
+      ? supabase
+          .from("item_price_history")
+          .select("*")
+          .in("item_variant_id", variantIds)
+          .order("effective_from", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const movements = (movementsRes.data ?? []) as StockMovement[];
+  const priceHistory = (pricesRes.data ?? []) as ItemPriceHistory[];
+
+  return (
+    <VariantsPanel
+      itemId={itemId}
+      variants={variants}
+      movements={movements}
+      priceHistory={priceHistory}
+    />
   );
 }
