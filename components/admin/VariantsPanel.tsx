@@ -76,7 +76,8 @@ function VariantForm({
     sku: initial?.sku ?? "",
     stock_quantity: initial ? String(initial.stock_quantity) : "0",
     current_price: initial ? String(initial.current_price) : "",
-    reorder_point: initial?.reorder_point != null ? String(initial.reorder_point) : "",
+    reorder_point:
+      initial?.reorder_point != null ? String(initial.reorder_point) : "",
   });
 
   function update(key: keyof typeof form, value: string) {
@@ -281,12 +282,14 @@ function MovementForm({
 // ---------- Main panel ----------
 
 type Props = {
+  itemId: string;
   variants: ItemVariant[];
   movements: StockMovement[];
   priceHistory: ItemPriceHistory[];
 };
 
 export default function VariantsPanel({
+  itemId,
   variants,
   movements,
   priceHistory,
@@ -305,7 +308,7 @@ export default function VariantsPanel({
     const res = await fetch("/api/admin/item-variants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ item_id: itemId, ...payload }),
     });
     setBusy(false);
 
@@ -458,7 +461,9 @@ export default function VariantsPanel({
                           <p className="font-medium text-gray-900">
                             {variantTitle(v)}
                           </p>
-                          {isLowStock(v) && <Badge tone="red">Stok rendah</Badge>}
+                          {isLowStock(v) && (
+                            <Badge tone="red">Stok rendah</Badge>
+                          )}
                         </div>
                         <p className="mt-0.5 text-xs text-gray-400">
                           {v.sku ? `SKU: ${v.sku} · ` : ""}
@@ -475,7 +480,9 @@ export default function VariantsPanel({
                           <p
                             className={
                               "text-sm tabular-nums " +
-                              (isLowStock(v) ? "font-medium text-red-600" : "text-gray-500")
+                              (isLowStock(v)
+                                ? "font-medium text-red-600"
+                                : "text-gray-500")
                             }
                           >
                             Stok: {v.stock_quantity}

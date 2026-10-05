@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabase } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   const supabase = createServerSupabase();
@@ -9,15 +9,24 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { item_id, color, size, sku, stock_quantity, current_price, reorder_point } =
-    await req.json();
+  const {
+    item_id,
+    color,
+    size,
+    sku,
+    stock_quantity,
+    current_price,
+    reorder_point,
+  } = await req.json();
+
+  console.log({ item_id, current_price });
 
   if (!item_id || current_price === undefined || current_price === null) {
     return NextResponse.json(
-      { error: 'Item and current_price are required' },
+      { error: "Item and current_price are required" },
       { status: 400 },
     );
   }
@@ -25,7 +34,7 @@ export async function POST(req: NextRequest) {
   const initialStock = Number(stock_quantity ?? 0);
 
   const { data, error } = await supabase
-    .from('item_variants')
+    .from("item_variants")
     .insert({
       item_id,
       color: color || null,
@@ -45,11 +54,11 @@ export async function POST(req: NextRequest) {
   // Keep the append-only ledger the source of truth: initial stock is
   // recorded as a movement so stock_quantity stays derivable from it.
   if (initialStock > 0) {
-    await supabase.from('stock_movements').insert({
+    await supabase.from("stock_movements").insert({
       item_variant_id: data.id,
-      type: 'restock',
+      type: "restock",
       quantity: initialStock,
-      note: 'Stok awal',
+      note: "Stok awal",
     });
   }
 
@@ -64,13 +73,13 @@ export async function PATCH(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json();
   const { id } = body;
   if (!id) {
-    return NextResponse.json({ error: 'Missing variant id' }, { status: 400 });
+    return NextResponse.json({ error: "Missing variant id" }, { status: 400 });
   }
 
   // stock_quantity is intentionally NOT patchable — stock only changes
@@ -85,13 +94,13 @@ export async function PATCH(req: NextRequest) {
     patch.reorder_point = body.reorder_point;
 
   const { data: existing, error: fetchError } = await supabase
-    .from('item_variants')
-    .select('current_price')
-    .eq('id', id)
+    .from("item_variants")
+    .select("current_price")
+    .eq("id", id)
     .single();
 
   if (fetchError || !existing) {
-    return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
+    return NextResponse.json({ error: "Variant not found" }, { status: 404 });
   }
 
   const priceChanged =
@@ -102,7 +111,7 @@ export async function PATCH(req: NextRequest) {
     // Append-only history: the old price is never lost. Written before
     // the update so a failure midway leaves a recoverable state.
     const { error: historyError } = await supabase
-      .from('item_price_history')
+      .from("item_price_history")
       .insert({
         item_variant_id: id,
         price: body.current_price,
@@ -110,16 +119,19 @@ export async function PATCH(req: NextRequest) {
       });
 
     if (historyError) {
-      return NextResponse.json({ error: historyError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: historyError.message },
+        { status: 500 },
+      );
     }
 
     patch.current_price = body.current_price;
   }
 
   const { data, error } = await supabase
-    .from('item_variants')
+    .from("item_variants")
     .update(patch)
-    .eq('id', id)
+    .eq("id", id)
     .select()
     .single();
 
@@ -138,18 +150,15 @@ export async function DELETE(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const id = new URL(req.url).searchParams.get('id');
+  const id = new URL(req.url).searchParams.get("id");
   if (!id) {
-    return NextResponse.json({ error: 'Missing variant id' }, { status: 400 });
+    return NextResponse.json({ error: "Missing variant id" }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from('item_variants')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from("item_variants").delete().eq("id", id);
 
   if (error) {
     // Blocked by RESTRICT when price history, stock movements,

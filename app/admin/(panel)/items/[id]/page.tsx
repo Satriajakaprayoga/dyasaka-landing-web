@@ -79,6 +79,7 @@ export default async function ItemDetailPage({
       </div>
 
       <VariantsPanel
+        itemId={item.id}
         variants={variants}
         movements={movements}
         priceHistory={priceHistory}
