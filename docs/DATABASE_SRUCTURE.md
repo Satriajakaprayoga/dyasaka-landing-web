@@ -1,7 +1,6 @@
 # Database Structure — Dyasaka Decoration (Balloon Party Planner)
 
 This document describes the target database structure for the project. It extends
-
 the existing schema (`categories`, `products`, `product_images`, `bookings`,
 `date_capacity`) to support:
 
@@ -67,14 +66,27 @@ cover/main image (no separate "is main" flag currently).
 
 ## 2. New tables — item master data
 
+Note: `items` does **not** use a foreign key to the shared `categories` table.
+`categories` continues to be used only by `products`. Items use their own
+plain-string `item_category` field instead (see below) — the two taxonomies
+are kept independent.
+
 ### `items`
 
 The general concept of a component — "Latex Balloon", "Arch Stand" — not yet
-tied to a specific color, size, or price. Each item belongs to a category and has
-a type that controls how its stock behaves.
+tied to a specific color, size, or price. Each item has a category and a type
+that controls how its stock behaves.
 
 - `id` (PK)
-- `category_id` (FK → categories)
+- `item_category` — plain string (e.g. "Balloon", "Stand Decoration"). This is
+  a deliberate departure from `products.category_id`: item categories are a
+  different taxonomy from product categories (physical component type vs.
+  event package type), and at this scale a free-text field is simpler than a
+  separate lookup table. Admin UI should source dropdown suggestions via
+  `SELECT DISTINCT item_category FROM items` (or similar), ideally as an
+  autocomplete/datalist so the admin can pick an existing value or type a new
+  one — this avoids a strict typo-prevention mechanism while still making
+  existing categories easy to reuse.
 - `name`
 - `type` — one of: `consumable`, `rentable`
 - `pieces_per_unit` — nullable, informational only (e.g. a stand "unit" may

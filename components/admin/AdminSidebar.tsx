@@ -7,6 +7,7 @@ import {
   CalendarIcon,
   DashboardIcon,
   ExternalLinkIcon,
+  LayersIcon,
   LogOutIcon,
   PackageIcon,
   TagIcon,
@@ -15,6 +16,7 @@ import {
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: DashboardIcon },
   { href: "/admin/products", label: "Produk", icon: PackageIcon },
+  { href: "/admin/items", label: "Inventori", icon: LayersIcon },
   { href: "/admin/bookings", label: "Booking", icon: CalendarIcon },
   { href: "/admin/categories", label: "Kategori", icon: TagIcon },
 ];

@@ -115,3 +115,17 @@ export function formatDate(iso: string) {
     year: "numeric",
   });
 }
+
+export function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatRupiah(amount: number) {
+  return `Rp ${amount.toLocaleString("id-ID")}`;
+}
