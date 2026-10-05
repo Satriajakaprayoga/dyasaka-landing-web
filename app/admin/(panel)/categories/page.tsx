@@ -8,6 +8,7 @@ import {
   Breadcrumbs,
   Card,
   EmptyState,
+  Skeleton,
   btnPrimary,
   inputClass,
 } from "@/components/admin/ui";
@@ -16,6 +17,7 @@ import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/admin/ico
 export default function CategoriesPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -29,6 +31,7 @@ export default function CategoriesPage() {
       .select("*")
       .order("name");
     setCategories((data ?? []) as Category[]);
+    setInitialLoading(false);
   }
 
   useEffect(() => {
@@ -164,7 +167,19 @@ export default function CategoriesPage() {
       </Card>
 
       <Card>
-        {categories.length > 0 ? (
+        {initialLoading ? (
+          <div className="space-y-4 p-4" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : categories.length > 0 ? (
           <ul className="divide-y divide-gray-100">
             {categories.map((c) => (
               <li
