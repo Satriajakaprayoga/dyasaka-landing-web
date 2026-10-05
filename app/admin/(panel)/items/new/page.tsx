@@ -5,12 +5,22 @@ import { supabase } from "@/lib/supabase";
 import ItemForm from "@/components/admin/ItemForm";
 
 export default function NewItemPage() {
-  const [itemCategories, setItemCategories] = useState<string[]>([]);
+  const [itemCategories, setItemCategories] = useState<
+    { name: string; count: number }[]
+  >([]);
 
   useEffect(() => {
     supabase.from("items").select("item_category").then(({ data }) => {
       const rows = (data ?? []) as { item_category: string }[];
-      setItemCategories([...new Set(rows.map((r) => r.item_category))].sort());
+      const counts = new Map<string, number>();
+      for (const r of rows) {
+        counts.set(r.item_category, (counts.get(r.item_category) ?? 0) + 1);
+      }
+      setItemCategories(
+        [...counts.entries()]
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
     });
   }, []);
 

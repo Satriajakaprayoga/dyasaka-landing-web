@@ -19,9 +19,13 @@ export default async function EditItemPage({
   }
 
   const rows = (allItems ?? []) as { item_category: string }[];
-  const itemCategories = [
-    ...new Set(rows.map((r) => r.item_category)),
-  ].sort();
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    counts.set(r.item_category, (counts.get(r.item_category) ?? 0) + 1);
+  }
+  const itemCategories = [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="mx-auto max-w-2xl">
