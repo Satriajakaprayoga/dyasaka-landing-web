@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import BottomNav from "./BottomNav";
 import {
-  CalendarIcon,
   DashboardIcon,
   ExternalLinkIcon,
   LayersIcon,
   LogOutIcon,
   PackageIcon,
   TagIcon,
+  CalendarIcon,
 } from "./icons";
 
 const navItems = [
@@ -87,9 +88,9 @@ export default function AdminSidebar() {
         </div>
       </aside>
 
-      {/* Mobile top bar */}
+      {/* Mobile top bar (brand + logout; navigation lives in BottomNav) */}
       <header className="sticky top-0 z-40 bg-gray-900 lg:hidden">
-        <div className="flex items-center justify-between px-4 pt-3">
+        <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🎈</span>
             <span className="text-sm font-semibold text-white">
@@ -105,23 +106,10 @@ export default function AdminSidebar() {
             <LogOutIcon className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 py-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                isActive(item.href)
-                  ? "bg-gray-800 text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
       </header>
+
+      {/* Mobile/tablet bottom navigation */}
+      <BottomNav />
     </>
   );
 }

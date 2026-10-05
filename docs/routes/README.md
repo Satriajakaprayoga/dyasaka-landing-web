@@ -11,7 +11,9 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 | `/product/[id]` | [public/product-detail.md](public/product-detail.md) | Product gallery, price, WhatsApp inquiry, availability calendar |
 | `/availability` | [public/availability.md](public/availability.md) | Public availability calendar (7 months ahead) |
 
-## Admin panel (`app/admin/(panel)` — sidebar layout, session required)
+## Admin panel (`app/admin/(panel)` — session required)
+
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking — Kategori stays reachable through the dashboard stat card and desktop sidebar.
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
