@@ -13,7 +13,7 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 
 ## Admin panel (`app/admin/(panel)` — session required)
 
-Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking — Kategori stays reachable through the dashboard stat card and desktop sidebar.
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing Kategori, Lihat Situs, and Keluar.
 
 | Route | Doc | Purpose |
 | --- | --- | --- |

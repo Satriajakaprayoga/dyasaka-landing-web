@@ -25,5 +25,5 @@ Operational overview: stat cards and the next 5 upcoming bookings.
 ## Navigation
 
 - Sidebar (`AdminSidebar`): Dashboard, Produk, Inventori, Booking, Kategori + logout.
-- Mobile/tablet (`< lg`): fixed bottom nav (`BottomNav`) with Dashboard, Produk, Inventori, Booking; Kategori is reachable via the Kategori stat card on this page.
+- Mobile/tablet (`< lg`): fixed bottom nav (`BottomNav`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — which opens the sidebar drawer (Kategori, Lihat Situs, Keluar).
 - Root of the admin breadcrumb tree — no breadcrumbs on this page.
