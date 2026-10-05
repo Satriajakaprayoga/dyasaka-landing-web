@@ -160,7 +160,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map((item) => {
+              {filtered.map((item) => {
                 const low = lowStockCount(item.item_variants);
                 return (
                   <tr key={item.id} className="transition hover:bg-gray-50">

@@ -200,7 +200,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map((b) => (
+              {filtered.map((b) => (
                 <tr key={b.id} className="transition hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
                     {formatDate(b.event_date)}

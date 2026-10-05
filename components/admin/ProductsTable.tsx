@@ -173,7 +173,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map((p) => {
+              {filtered.map((p) => {
                 const cover = [...(p.product_images ?? [])].sort(
                   (a, b) => a.sort_order - b.sort_order,
                 )[0];
