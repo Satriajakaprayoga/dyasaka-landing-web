@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Item, ItemVariant } from "@/lib/types";
-import { Badge, Card, EmptyState } from "./ui";
+import type { Item, ItemType, ItemVariant } from "@/lib/types";
+import { Badge, Card, EmptyState, inputClass } from "./ui";
 import { LayersIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Item & {
@@ -21,6 +21,27 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | ItemType>("all");
+  const [lowOnly, setLowOnly] = useState(false);
+
+  const filtered = rows.filter((item) => {
+    if (typeFilter !== "all" && item.type !== typeFilter) return false;
+    if (lowOnly && lowStockCount(item.item_variants) === 0) return false;
+
+    const q = query.trim().toLowerCase();
+    if (q) {
+      const haystack = [
+        item.name,
+        item.item_category,
+        ...item.item_variants.map((v) => [v.color, v.size, v.sku].filter(Boolean).join(" ")),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 
   async function handleDelete(item: Row) {
     if (
@@ -69,6 +90,63 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
           {error}
         </p>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-64">
+          <input
+            type="search"
+            placeholder="Cari nama, kategori, varian…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="w-full sm:w-40">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as "all" | ItemType)}
+            className={inputClass}
+            aria-label="Filter tipe item"
+          >
+            <option value="all">Semua Tipe</option>
+            <option value="consumable">Habis Pakai</option>
+            <option value="rentable">Sewa</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={lowOnly}
+            onChange={(e) => setLowOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+          />
+          Hanya stok rendah
+        </label>
+        <span className="ml-auto text-xs text-gray-400">
+          {filtered.length} dari {rows.length} item
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card className="overflow-hidden">
+          <EmptyState
+            title="Tidak ada item yang cocok"
+            subtitle="Coba ubah kata kunci atau reset filter."
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setTypeFilter("all");
+                setLowOnly(false);
+              }}
+              className="text-sm font-medium text-gray-900 underline underline-offset-4"
+            >
+              Reset Filter
+            </button>
+          </EmptyState>
+        </Card>
+      ) : (
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -151,6 +229,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
           </table>
         </div>
       </Card>
+      )}
     </div>
   );
 }

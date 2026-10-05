@@ -4,7 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Booking, BookingStatus, Product } from "@/lib/types";
-import { BookingStatusBadge, Card, EmptyState, formatDate } from "./ui";
+import {
+  BookingStatusBadge,
+  Card,
+  EmptyState,
+  formatDate,
+  inputClass,
+} from "./ui";
 import { PencilIcon, TrashIcon } from "./icons";
 
 type Row = Booking & { products: Pick<Product, "name"> };
@@ -16,10 +22,37 @@ const statusOptions: { value: BookingStatus; label: string }[] = [
   { value: "cancelled", label: "Dibatalkan" },
 ];
 
+type PeriodFilter = "all" | "upcoming" | "past";
+
 export default function BookingsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | BookingStatus>("all");
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const filtered = rows.filter((b) => {
+    if (statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (periodFilter === "upcoming" && b.event_date < today) return false;
+    if (periodFilter === "past" && b.event_date >= today) return false;
+
+    const q = query.trim().toLowerCase();
+    if (q) {
+      const haystack = [
+        b.customer_name,
+        b.phone,
+        b.theme ?? "",
+        b.products?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 
   async function handleStatusChange(b: Row, status: BookingStatus) {
     setBusyId(b.id);
@@ -88,6 +121,71 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
           {error}
         </p>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-64">
+          <input
+            type="search"
+            placeholder="Cari customer, telepon, tema…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="w-full sm:w-40">
+          <select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "all" | BookingStatus)
+            }
+            className={inputClass}
+            aria-label="Filter status booking"
+          >
+            <option value="all">Semua Status</option>
+            {statusOptions.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full sm:w-40">
+          <select
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}
+            className={inputClass}
+            aria-label="Filter periode acara"
+          >
+            <option value="all">Semua Periode</option>
+            <option value="upcoming">Akan Datang</option>
+            <option value="past">Sudah Lewat</option>
+          </select>
+        </div>
+        <span className="ml-auto text-xs text-gray-400">
+          {filtered.length} dari {rows.length} booking
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card className="overflow-hidden">
+          <EmptyState
+            title="Tidak ada booking yang cocok"
+            subtitle="Coba ubah kata kunci atau reset filter."
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setStatusFilter("all");
+                setPeriodFilter("all");
+              }}
+              className="text-sm font-medium text-gray-900 underline underline-offset-4"
+            >
+              Reset Filter
+            </button>
+          </EmptyState>
+        </Card>
+      ) : (
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -163,6 +261,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
           </table>
         </div>
       </Card>
+      )}
     </div>
   );
 }

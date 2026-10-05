@@ -1,5 +1,6 @@
 import type { BookingStatus } from "@/lib/types";
-import { InboxIcon } from "./icons";
+import Link from "next/link";
+import { ArrowLeftIcon, InboxIcon } from "./icons";
 
 export const inputClass =
   "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 transition";
@@ -11,6 +12,69 @@ export const btnPrimary =
 
 export const btnSecondary =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:opacity-50";
+
+export function Breadcrumbs({
+  items,
+}: {
+  items: { label: string; href?: string }[];
+}) {
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm"
+    >
+      {items.map((item, i) => {
+        const isLast = i === items.length - 1;
+        return (
+          <span key={i} className="flex min-w-0 items-center gap-1.5">
+            {i > 0 && (
+              <span className="text-gray-300" aria-hidden="true">
+                /
+              </span>
+            )}
+            {item.href && !isLast ? (
+              <Link
+                href={item.href}
+                className="truncate text-gray-400 transition hover:text-gray-900"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span
+                className={
+                  isLast
+                    ? "truncate font-medium text-gray-900"
+                    : "truncate text-gray-400"
+                }
+                aria-current={isLast ? "page" : undefined}
+              >
+                {item.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function BackLink({
+  href,
+  label = "Kembali",
+}: {
+  href: string;
+  label?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+    >
+      <ArrowLeftIcon className="h-4 w-4" />
+      {label}
+    </Link>
+  );
+}
 
 export function Card({
   children,

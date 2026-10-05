@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Category, Product, ProductImage } from "@/lib/types";
-import { Badge, Card, EmptyState } from "./ui";
+import { Badge, Card, EmptyState, inputClass } from "./ui";
 import { PackageIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Product & {
@@ -12,10 +12,39 @@ type Row = Product & {
   product_images: Pick<ProductImage, "image_url" | "sort_order">[];
 };
 
+const statusFilterOptions = [
+  { value: "all", label: "Semua Status" },
+  { value: "active", label: "Aktif" },
+  { value: "inactive", label: "Nonaktif" },
+] as const;
+
 export default function ProductsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const categoryNames = [
+    ...new Set(rows.map((p) => p.categories?.name).filter(Boolean)),
+  ].sort() as string[];
+
+  const filtered = rows.filter((p) => {
+    if (categoryFilter !== "all" && p.categories?.name !== categoryFilter)
+      return false;
+    if (statusFilter === "active" && !p.is_active) return false;
+    if (statusFilter === "inactive" && p.is_active) return false;
+
+    const q = query.trim().toLowerCase();
+    if (q) {
+      const haystack = [p.name, p.description ?? "", p.categories?.name ?? ""]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 
   async function handleDelete(p: Row) {
     if (
@@ -64,6 +93,73 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
           {error}
         </p>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-64">
+          <input
+            type="search"
+            placeholder="Cari nama / deskripsi produk…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="w-full sm:w-44">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className={inputClass}
+            aria-label="Filter kategori"
+          >
+            <option value="all">Semua Kategori</option>
+            {categoryNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full sm:w-36">
+          <select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "all" | "active" | "inactive")
+            }
+            className={inputClass}
+            aria-label="Filter status"
+          >
+            {statusFilterOptions.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <span className="ml-auto text-xs text-gray-400">
+          {filtered.length} dari {rows.length} produk
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card className="overflow-hidden">
+          <EmptyState
+            title="Tidak ada produk yang cocok"
+            subtitle="Coba ubah kata kunci atau reset filter."
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setCategoryFilter("all");
+                setStatusFilter("all");
+              }}
+              className="text-sm font-medium text-gray-900 underline underline-offset-4"
+            >
+              Reset Filter
+            </button>
+          </EmptyState>
+        </Card>
+      ) : (
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -147,6 +243,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
           </table>
         </div>
       </Card>
+      )}
     </div>
   );
 }

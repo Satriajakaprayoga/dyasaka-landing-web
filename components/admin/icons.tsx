@@ -145,3 +145,20 @@ export function ChevronDownIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m9 18 6-6-6-6" />
+    </Svg>
+  );
+}
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </Svg>
+  );
+}

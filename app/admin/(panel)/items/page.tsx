@@ -2,7 +2,7 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
 import type { Item, ItemVariant } from "@/lib/types";
 import ItemsTable from "@/components/admin/ItemsTable";
-import { PageHeader, btnPrimary } from "@/components/admin/ui";
+import { Breadcrumbs, PageHeader, btnPrimary } from "@/components/admin/ui";
 import { PlusIcon } from "@/components/admin/icons";
 
 export default async function ItemsListPage() {
@@ -16,6 +16,14 @@ export default async function ItemsListPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumbs
+          items={[
+            { label: "Dashboard", href: "/admin" },
+            { label: "Inventori" },
+          ]}
+        />
+      </div>
       <PageHeader
         title="Inventori"
         subtitle="Item & varian penyusun paket dekorasi"

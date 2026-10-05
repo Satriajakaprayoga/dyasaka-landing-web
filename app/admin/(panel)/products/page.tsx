@@ -2,7 +2,7 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
 import type { Category, Product, ProductImage } from "@/lib/types";
 import ProductsTable from "@/components/admin/ProductsTable";
-import { PageHeader, btnPrimary } from "@/components/admin/ui";
+import { Breadcrumbs, PageHeader, btnPrimary } from "@/components/admin/ui";
 import { PlusIcon } from "@/components/admin/icons";
 
 export default async function ProductsListPage() {
@@ -21,6 +21,11 @@ export default async function ProductsListPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumbs
+          items={[{ label: "Dashboard", href: "/admin" }, { label: "Produk" }]}
+        />
+      </div>
       <PageHeader title="Produk" subtitle="Kelola katalog dekorasi">
         <Link href="/admin/products/new" className={btnPrimary}>
           <PlusIcon className="h-4 w-4" />

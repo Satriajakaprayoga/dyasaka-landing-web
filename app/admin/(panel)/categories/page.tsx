@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Category } from "@/lib/types";
 import {
+  Breadcrumbs,
   Card,
   EmptyState,
   btnPrimary,
@@ -120,6 +121,14 @@ export default function CategoriesPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-6">
+        <div className="mb-4">
+          <Breadcrumbs
+            items={[
+              { label: "Dashboard", href: "/admin" },
+              { label: "Kategori" },
+            ]}
+          />
+        </div>
         <h1 className="text-2xl font-semibold text-gray-900">Kategori</h1>
         <p className="mt-1 text-sm text-gray-500">
           {categories.length > 0

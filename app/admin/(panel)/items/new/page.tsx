@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ItemForm from "@/components/admin/ItemForm";
+import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
 export default function NewItemPage() {
   const [itemCategories, setItemCategories] = useState<
@@ -27,7 +28,19 @@ export default function NewItemPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Tambah Item</h1>
+        <div className="flex items-center justify-between gap-4">
+          <Breadcrumbs
+            items={[
+              { label: "Dashboard", href: "/admin" },
+              { label: "Inventori", href: "/admin/items" },
+              { label: "Tambah Item" },
+            ]}
+          />
+          <BackLink href="/admin/items" />
+        </div>
+        <h1 className="mt-4 text-2xl font-semibold text-gray-900">
+          Tambah Item
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
           Komponen dasar penyusun paket — habis pakai atau sewa
         </p>

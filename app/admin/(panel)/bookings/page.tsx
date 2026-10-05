@@ -2,7 +2,7 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
 import type { Booking, Product } from "@/lib/types";
 import BookingsTable from "@/components/admin/BookingsTable";
-import { PageHeader, btnPrimary } from "@/components/admin/ui";
+import { Breadcrumbs, PageHeader, btnPrimary } from "@/components/admin/ui";
 import { PlusIcon } from "@/components/admin/icons";
 
 export default async function BookingsListPage() {
@@ -16,6 +16,11 @@ export default async function BookingsListPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumbs
+          items={[{ label: "Dashboard", href: "/admin" }, { label: "Booking" }]}
+        />
+      </div>
       <PageHeader title="Daftar Booking" subtitle="Kelola semua booking acara">
         <Link href="/admin/bookings/new" className={btnPrimary}>
           <PlusIcon className="h-4 w-4" />

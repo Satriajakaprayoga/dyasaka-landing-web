@@ -7,7 +7,7 @@ import type {
   StockMovement,
 } from "@/lib/types";
 import VariantsPanel from "@/components/admin/VariantsPanel";
-import { Badge } from "@/components/admin/ui";
+import { BackLink, Badge, Breadcrumbs } from "@/components/admin/ui";
 import { PencilIcon } from "@/components/admin/icons";
 
 export default async function ItemDetailPage({
@@ -52,6 +52,16 @@ export default async function ItemDetailPage({
 
   return (
     <div>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <Breadcrumbs
+          items={[
+            { label: "Dashboard", href: "/admin" },
+            { label: "Inventori", href: "/admin/items" },
+            { label: item.name },
+          ]}
+        />
+        <BackLink href="/admin/items" />
+      </div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
