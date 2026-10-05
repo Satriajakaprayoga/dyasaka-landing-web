@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Item, ItemType, ItemVariant } from "@/lib/types";
 import { Badge, Card, EmptyState, inputClass } from "./ui";
+import { usePersistentFilters } from "./usePersistentFilters";
 import { LayersIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Item & {
@@ -21,9 +22,14 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | ItemType>("all");
-  const [lowOnly, setLowOnly] = useState(false);
+  const [filters, setFilter, resetFilters] = usePersistentFilters<{
+    q: string;
+    type: string;
+    low: boolean;
+  }>("admin-items-filters", { q: "", type: "all", low: false });
+  const query = filters.q as string;
+  const typeFilter = filters.type as "all" | ItemType;
+  const lowOnly = Boolean(filters.low);
 
   const filtered = rows.filter((item) => {
     if (typeFilter !== "all" && item.type !== typeFilter) return false;
@@ -97,14 +103,14 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari nama, kategori, varian…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => setFilter({ q: e.target.value })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-40">
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as "all" | ItemType)}
+            onChange={(e) => setFilter({ type: e.target.value })}
             className={inputClass}
             aria-label="Filter tipe item"
           >
@@ -117,7 +123,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
           <input
             type="checkbox"
             checked={lowOnly}
-            onChange={(e) => setLowOnly(e.target.checked)}
+            onChange={(e) => setFilter({ low: e.target.checked })}
             className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
           />
           Hanya stok rendah
@@ -135,11 +141,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
           >
             <button
               type="button"
-              onClick={() => {
-                setQuery("");
-                setTypeFilter("all");
-                setLowOnly(false);
-              }}
+              onClick={resetFilters}
               className="text-sm font-medium text-gray-900 underline underline-offset-4"
             >
               Reset Filter

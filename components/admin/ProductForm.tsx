@@ -13,6 +13,58 @@ import {
 } from "./ui";
 import { ImageIcon, PlusIcon } from "./icons";
 
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_FILE_MB = 10;
+const MAX_DIMENSION = 1600;
+const JPEG_QUALITY = 0.82;
+const SKIP_COMPRESSION_BYTES = 300 * 1024;
+
+/**
+ * Shrink large photos before they leave the browser: downscale to
+ * MAX_DIMENSION on the long edge and re-encode as JPEG. Small files and
+ * files the browser cannot decode are returned untouched.
+ */
+async function compressImage(file: File): Promise<File> {
+  if (file.size <= SKIP_COMPRESSION_BYTES) return file;
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return file; // undecodable in this browser — upload the original
+  }
+
+  const scale = Math.min(
+    1,
+    MAX_DIMENSION / Math.max(bitmap.width, bitmap.height),
+  );
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    return file;
+  }
+
+  // Flatten transparency onto white so JPEG output has no black background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/jpeg", JPEG_QUALITY),
+  );
+  if (!blob || blob.size >= file.size) return file;
+
+  const name = `${file.name.replace(/\.[^.]+$/, "")}.jpg`;
+  return new File([blob], name, { type: "image/jpeg" });
+}
+
 function FilePreview({
   file,
   onRemove,
@@ -116,7 +168,21 @@ export default function ProductForm({ categories, product }: Props) {
   function addFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.target.files;
     if (!list) return;
-    setFiles((prev) => [...prev, ...Array.from(list)]);
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+    for (const file of Array.from(list)) {
+      if (!ACCEPTED_TYPES.includes(file.type)) {
+        rejected.push(`${file.name} (bukan JPG/PNG/WebP)`);
+      } else if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        rejected.push(`${file.name} (melebihi ${MAX_FILE_MB}MB)`);
+      } else {
+        accepted.push(file);
+      }
+    }
+    setFiles((prev) => [...prev, ...accepted]);
+    if (rejected.length > 0) {
+      setError(`File ditolak: ${rejected.join(", ")}`);
+    }
     e.target.value = "";
   }
 
@@ -136,34 +202,56 @@ export default function ProductForm({ categories, product }: Props) {
     await supabase.from("product_images").delete().eq("id", image.id);
   }
 
-  async function uploadImage(file: File, productId: string, sortOrder: number) {
-    const path = `${productId}/${Date.now()}-${file.name}`;
+  async function uploadImage(
+    file: File,
+    productId: string,
+    sortOrder: number,
+  ): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const compressed = await compressImage(file);
+      const ext =
+        compressed.type === "image/png"
+          ? "png"
+          : compressed.type === "image/webp"
+            ? "webp"
+            : "jpg";
+      const base =
+        compressed.name
+          .replace(/\.[^.]+$/, "")
+          .replace(/[^\w-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 60) || "foto";
+      const path = `${productId}/${Date.now()}-${sortOrder}-${base}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("product-images")
-      .upload(path, file);
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(path, compressed);
+      if (uploadError) return { ok: false, message: uploadError.message };
 
-    if (uploadError) {
-      setError(`Upload failed for ${file.name}: ${uploadError.message}`);
-      return;
-    }
+      const { data: publicUrl } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(path);
 
-    const { data: publicUrl } = supabase.storage
-      .from("product-images")
-      .getPublicUrl(path);
+      const { error: insertError } = await supabase
+        .from("product_images")
+        .insert({
+          product_id: productId,
+          image_url: publicUrl.publicUrl,
+          sort_order: sortOrder,
+        });
 
-    const { error: insertError } = await supabase
-      .from("product_images")
-      .insert({
-        product_id: productId,
-        image_url: publicUrl.publicUrl,
-        sort_order: sortOrder,
-      });
+      if (insertError) {
+        // Don't leave orphan files in storage when the record insert fails
+        await supabase.storage.from("product-images").remove([path]);
+        return { ok: false, message: insertError.message };
+      }
 
-    if (insertError) {
-      setError(
-        `Failed to save image record for ${file.name}: ${insertError.message}`,
-      );
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : "kesalahan tidak diketahui",
+      };
     }
   }
 
@@ -205,10 +293,42 @@ export default function ProductForm({ categories, product }: Props) {
       await deleteImage(img);
     }
 
-    // 3. Upload new photos, continuing sort_order after existing images
+    // 3. Renumber kept images so sort_order stays contiguous 0..n-1
+    //    (removals leave gaps; new uploads must not collide)
+    for (let i = 0; i < existingImages.length; i++) {
+      const img = existingImages[i];
+      if (img.sort_order === i) continue;
+      const { error } = await supabase
+        .from("product_images")
+        .update({ sort_order: i })
+        .eq("id", img.id);
+      if (error) {
+        setError(`Gagal memperbarui urutan foto: ${error.message}`);
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // 4. Upload new photos, collecting failures instead of swallowing them
     const base = existingImages.length;
+    const failures: string[] = [];
+    const failedFiles: File[] = [];
     for (let i = 0; i < files.length; i++) {
-      await uploadImage(files[i], productId, base + i);
+      const result = await uploadImage(files[i], productId, base + i);
+      if (result.ok) continue;
+      failures.push(`• ${files[i].name}: ${result.message}`);
+      failedFiles.push(files[i]);
+    }
+
+    if (failures.length > 0) {
+      // Stay on the page with the failed files still selected so the user
+      // can retry without re-picking them.
+      setFiles(failedFiles);
+      setError(
+        `Beberapa foto gagal disimpan — produk sudah tersimpan. Cek lalu simpan lagi.\n${failures.join("\n")}`,
+      );
+      setSubmitting(false);
+      return;
     }
 
     setSubmitting(false);
@@ -292,7 +412,8 @@ export default function ProductForm({ categories, product }: Props) {
               Klik untuk pilih foto
             </span>
             <span className="text-xs text-gray-400">
-              JPG/PNG/WebP · bisa pilih beberapa
+              JPG/PNG/WebP · maks {MAX_FILE_MB}MB · dikompres otomatis · bisa
+              pilih beberapa
             </span>
             <input
               type="file"
@@ -323,7 +444,7 @@ export default function ProductForm({ categories, product }: Props) {
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <p className="whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}
           </p>
         )}

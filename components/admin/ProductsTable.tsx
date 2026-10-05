@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Category, Product, ProductImage } from "@/lib/types";
 import { Badge, Card, EmptyState, inputClass } from "./ui";
+import { usePersistentFilters } from "./usePersistentFilters";
 import { PackageIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Product & {
@@ -22,9 +23,14 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [filters, setFilter, resetFilters] = usePersistentFilters<{
+    q: string;
+    cat: string;
+    status: string;
+  }>("admin-products-filters", { q: "", cat: "all", status: "all" });
+  const query = filters.q as string;
+  const categoryFilter = filters.cat as string;
+  const statusFilter = filters.status as "all" | "active" | "inactive";
 
   const categoryNames = [
     ...new Set(rows.map((p) => p.categories?.name).filter(Boolean)),
@@ -100,14 +106,14 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari nama / deskripsi produk…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => setFilter({ q: e.target.value })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-44">
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => setFilter({ cat: e.target.value })}
             className={inputClass}
             aria-label="Filter kategori"
           >
@@ -122,9 +128,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
         <div className="w-full sm:w-36">
           <select
             value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as "all" | "active" | "inactive")
-            }
+            onChange={(e) => setFilter({ status: e.target.value })}
             className={inputClass}
             aria-label="Filter status"
           >
@@ -148,11 +152,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
           >
             <button
               type="button"
-              onClick={() => {
-                setQuery("");
-                setCategoryFilter("all");
-                setStatusFilter("all");
-              }}
+              onClick={resetFilters}
               className="text-sm font-medium text-gray-900 underline underline-offset-4"
             >
               Reset Filter

@@ -11,6 +11,7 @@ import {
   formatDate,
   inputClass,
 } from "./ui";
+import { usePersistentFilters } from "./usePersistentFilters";
 import { PencilIcon, TrashIcon } from "./icons";
 
 type Row = Booking & { products: Pick<Product, "name"> };
@@ -28,9 +29,14 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | BookingStatus>("all");
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
+  const [filters, setFilter, resetFilters] = usePersistentFilters<{
+    q: string;
+    status: string;
+    period: string;
+  }>("admin-bookings-filters", { q: "", status: "all", period: "all" });
+  const query = filters.q as string;
+  const statusFilter = filters.status as "all" | BookingStatus;
+  const periodFilter = filters.period as PeriodFilter;
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -128,16 +134,14 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari customer, telepon, tema…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => setFilter({ q: e.target.value })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-40">
           <select
             value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as "all" | BookingStatus)
-            }
+            onChange={(e) => setFilter({ status: e.target.value })}
             className={inputClass}
             aria-label="Filter status booking"
           >
@@ -152,7 +156,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
         <div className="w-full sm:w-40">
           <select
             value={periodFilter}
-            onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}
+            onChange={(e) => setFilter({ period: e.target.value })}
             className={inputClass}
             aria-label="Filter periode acara"
           >
@@ -174,11 +178,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
           >
             <button
               type="button"
-              onClick={() => {
-                setQuery("");
-                setStatusFilter("all");
-                setPeriodFilter("all");
-              }}
+              onClick={resetFilters}
               className="text-sm font-medium text-gray-900 underline underline-offset-4"
             >
               Reset Filter
