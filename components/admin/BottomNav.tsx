@@ -40,7 +40,7 @@ export default function BottomNav({ onOpenOther, otherActive }: Props) {
             key={item.href}
             href={item.href}
             aria-current={isActive(item.href) ? "page" : undefined}
-            className={`flex flex-col items-center gap-0.5 px-1 py-2.5 text-[11px] font-medium transition ${
+            className={`flex flex-col items-center gap-0.5 px-1 py-2.5 text-[11px] font-medium transition active:scale-95 ${
               isActive(item.href)
                 ? "text-gray-900"
                 : "text-gray-400 hover:text-gray-600"
@@ -54,7 +54,7 @@ export default function BottomNav({ onOpenOther, otherActive }: Props) {
           type="button"
           onClick={onOpenOther}
           aria-expanded={otherActive}
-          className={`flex flex-col items-center gap-0.5 px-1 py-2.5 text-[11px] font-medium transition ${
+          className={`flex flex-col items-center gap-0.5 px-1 py-2.5 text-[11px] font-medium transition active:scale-95 ${
             otherActive
               ? "text-gray-900"
               : "text-gray-400 hover:text-gray-600"

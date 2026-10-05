@@ -1,4 +1,5 @@
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import PageTransition from "@/components/admin/PageTransition";
 
 export default function AdminPanelLayout({
   children,
@@ -10,7 +11,7 @@ export default function AdminPanelLayout({
       <AdminSidebar />
       <div className="lg:pl-64">
         <main className="mx-auto max-w-5xl px-4 pb-28 pt-8 lg:px-8 lg:pb-8">
-          {children}
+          <PageTransition>{children}</PageTransition>
         </main>
       </div>
     </div>

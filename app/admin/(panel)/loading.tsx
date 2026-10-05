@@ -1,6 +1,7 @@
+import DelayedFallback from "@/components/admin/DelayedFallback";
 import { Card, Skeleton } from "@/components/admin/ui";
 
-export default function AdminPanelLoading() {
+function TableSkeleton() {
   return (
     <div aria-busy="true" aria-label="Memuat halaman">
       <Skeleton className="mb-4 h-4 w-40" />
@@ -34,4 +35,8 @@ export default function AdminPanelLoading() {
       </Card>
     </div>
   );
+}
+
+export default function AdminPanelLoading() {
+  return <DelayedFallback fallback={<TableSkeleton />} delay={600} />;
 }

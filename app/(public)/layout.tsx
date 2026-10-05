@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PageTransition from "@/components/admin/PageTransition";
 
 export default function PublicLayout({
   children,
@@ -25,7 +26,7 @@ export default function PublicLayout({
           </div>
         </nav>
       </header>
-      {children}
+      <PageTransition>{children}</PageTransition>
     </>
   );
 }
