@@ -1,15 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { BalloonIcon } from "@/components/BalloonIcon";
 
 type GalleryImage = { id: string; image_url: string };
 
 /**
- * Product photo gallery: large main image with a thumbnail strip to
- * switch photos. The first image renders on the server (priority), and
- * switching is instant client state — no fetch involved.
+ * Product photo slider: a scroll-snap track (native swipe on touch)
+ * with arrow buttons, a synced thumbnail strip, a photo counter, and
+ * keyboard support. Controls are hidden when there is only one photo.
+ * The first photo renders eagerly (priority, LCP); the rest lazy-load.
  */
 export default function ProductGallery({
   name,
@@ -18,9 +19,43 @@ export default function ProductGallery({
   name: string;
   images: GalleryImage[];
 }) {
+  const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  const total = images.length;
 
-  if (images.length === 0) {
+  const scrollTo = useCallback(
+    (index: number) => {
+      const track = trackRef.current;
+      if (!track) return;
+      const clamped = Math.max(0, Math.min(total - 1, index));
+      track.scrollTo({ left: clamped * track.clientWidth, behavior: "smooth" });
+      setActive(clamped);
+    },
+    [total]
+  );
+
+  // Sync the active index while the user swipes/scrolls the track.
+  const handleScroll = useCallback(() => {
+    const track = trackRef.current;
+    if (!track || track.clientWidth === 0) return;
+    const index = Math.round(track.scrollLeft / track.clientWidth);
+    setActive(Math.max(0, Math.min(total - 1, index)));
+  }, [total]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        scrollTo(active - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        scrollTo(active + 1);
+      }
+    },
+    [active, scrollTo]
+  );
+
+  if (total === 0) {
     return (
       <div className="flex aspect-square flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-pink-50 text-pink-300">
         <BalloonIcon className="h-14 w-14" />
@@ -29,44 +64,105 @@ export default function ProductGallery({
     );
   }
 
-  const index = Math.min(active, images.length - 1);
-  const current = images[index];
+  const multiple = total > 1;
 
   return (
     <div>
-      <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-pink-50">
-        <Image
-          key={current.id}
-          src={current.image_url}
-          alt={`Foto ${index + 1} — ${name}`}
-          fill
-          priority
-          sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover"
-        />
-        {images.length > 1 && (
-          <span className="absolute bottom-3 right-3 rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">
-            {index + 1} / {images.length}
-          </span>
+      <div
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="region"
+        aria-roledescription="carousel"
+        aria-label={`Foto ${name}`}
+        className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-pink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
+      >
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          className="flex h-full w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {images.map((img, i) => (
+            <div
+              key={img.id}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`Foto ${i + 1} dari ${total}`}
+              className="relative h-full w-full shrink-0 snap-center"
+            >
+              <Image
+                src={img.image_url}
+                alt={`Foto ${i + 1} — ${name}`}
+                fill
+                priority={i === 0}
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                draggable={false}
+                className="object-cover"
+              />
+            </div>
+          ))}
+        </div>
+
+        {multiple && (
+          <>
+            <button
+              type="button"
+              aria-label="Foto sebelumnya"
+              onClick={() => scrollTo(active - 1)}
+              disabled={active === 0}
+              className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-md backdrop-blur transition hover:bg-white active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              aria-label="Foto berikutnya"
+              onClick={() => scrollTo(active + 1)}
+              disabled={active === total - 1}
+              className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-md backdrop-blur transition hover:bg-white active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+
+            <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">
+              {active + 1} / {total}
+            </span>
+          </>
         )}
       </div>
 
-      {images.length > 1 && (
-        <div
-          className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-6"
-          role="tablist"
-          aria-label="Foto produk"
-        >
+      {multiple && (
+        <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-6">
           {images.map((img, i) => (
             <button
               key={img.id}
               type="button"
-              role="tab"
-              aria-selected={i === index}
               aria-label={`Lihat foto ${i + 1}`}
-              onClick={() => setActive(i)}
+              aria-current={i === active}
+              onClick={() => scrollTo(i)}
               className={`relative aspect-square overflow-hidden rounded-xl border-2 transition ${
-                i === index
+                i === active
                   ? "border-pink-600 opacity-100"
                   : "border-transparent opacity-60 hover:opacity-100"
               }`}

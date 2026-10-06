@@ -26,7 +26,7 @@ Single cached fetch (`getProductData` wrapped in React `cache`, shared by the pa
 
 ## Components
 
-- **`ProductGallery`** (client island, same folder) — large square main image (priority, LCP) + thumbnail strip (`role="tablist"`, active border-pink-600), photo counter badge, "Belum ada foto" placeholder.
+- **`ProductGallery`** (client island, same folder) — scroll-snap slider: native swipe on touch, arrow buttons (white circles, fade out at the edges), synced thumbnail strip (active border-pink-600), `1 / N` counter badge, keyboard ←/→ on the focused viewport. WAI-ARIA carousel pattern (`role="region"` + `aria-roledescription="carousel"`, slides as `group`s). Only the first photo is `priority` (LCP), the rest lazy-load; controls hidden for a single photo; "Belum ada foto" placeholder when empty.
 - **`AvailabilityCalendar compact`** (`components/AvailabilityCalendar.tsx`, client island) — single-month view with `‹`/`›` navigation up to 6 months ahead, skeleton while loading, today ring, green = available / red strikethrough = full, legend. Reads only from `date_capacity` (no customer data).
 
 ## Layout
