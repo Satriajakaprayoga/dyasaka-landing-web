@@ -8,7 +8,21 @@ type SearchParams = {
   min_price?: string;
   max_price?: string;
   q?: string;
+  page?: string;
 };
+
+const PAGE_SIZE = 12;
+
+function catalogHref(params: SearchParams, page: number): string {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set('q', params.q);
+  if (params.category) sp.set('category', params.category);
+  if (params.min_price) sp.set('min_price', params.min_price);
+  if (params.max_price) sp.set('max_price', params.max_price);
+  if (page > 1) sp.set('page', String(page));
+  const qs = sp.toString();
+  return `/catalog${qs ? `?${qs}` : ''}`;
+}
 
 async function getCategories() {
   const { data } = await supabase.from('categories').select('*').returns<Category[]>();
@@ -40,6 +54,10 @@ async function getProducts(params: SearchParams) {
 
 export default async function CatalogPage({ searchParams }: { searchParams: SearchParams }) {
   const [categories, products] = await Promise.all([getCategories(), getProducts(searchParams)]);
+
+  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(searchParams.page) || 1), totalPages);
+  const pageItems = products.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -87,7 +105,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
         <p className="text-gray-500">Tidak ada produk yang cocok dengan filter ini.</p>
       ) : (
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {products.map((product) => {
+          {pageItems.map((product) => {
             const cover = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order)[0];
             return (
               <Link
@@ -113,6 +131,30 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {products.length > 0 && totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-4">
+          {page > 1 && (
+            <Link
+              href={catalogHref(searchParams, page - 1)}
+              className="rounded border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              ‹ Sebelumnya
+            </Link>
+          )}
+          <span className="text-sm text-gray-500">
+            Halaman {page} dari {totalPages}
+          </span>
+          {page < totalPages && (
+            <Link
+              href={catalogHref(searchParams, page + 1)}
+              className="rounded border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              Selanjutnya ›
+            </Link>
+          )}
         </div>
       )}
     </main>

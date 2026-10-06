@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Category, Product, ProductImage } from "@/lib/types";
 import { Badge, Card, EmptyState, inputClass } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
+import Pagination from "./Pagination";
 import { PackageIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Product & {
@@ -27,10 +28,12 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
     q: string;
     cat: string;
     status: string;
-  }>("admin-products-filters", { q: "", cat: "all", status: "all" });
+    page: number;
+  }>("admin-products-filters", { q: "", cat: "all", status: "all", page: 1 });
   const query = filters.q as string;
   const categoryFilter = filters.cat as string;
   const statusFilter = filters.status as "all" | "active" | "inactive";
+  const page = filters.page;
 
   const categoryNames = [
     ...new Set(rows.map((p) => p.categories?.name).filter(Boolean)),
@@ -51,6 +54,19 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
     }
     return true;
   });
+
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  function changePage(p: number) {
+    setFilter({ page: p });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function handleDelete(p: Row) {
     if (
@@ -106,14 +122,14 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari nama / deskripsi produk…"
             value={query}
-            onChange={(e) => setFilter({ q: e.target.value })}
+            onChange={(e) => setFilter({ q: e.target.value, page: 1 })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-44">
           <select
             value={categoryFilter}
-            onChange={(e) => setFilter({ cat: e.target.value })}
+            onChange={(e) => setFilter({ cat: e.target.value, page: 1 })}
             className={inputClass}
             aria-label="Filter kategori"
           >
@@ -128,7 +144,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
         <div className="w-full sm:w-36">
           <select
             value={statusFilter}
-            onChange={(e) => setFilter({ status: e.target.value })}
+            onChange={(e) => setFilter({ status: e.target.value, page: 1 })}
             className={inputClass}
             aria-label="Filter status"
           >
@@ -173,7 +189,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((p) => {
+              {pageRows.map((p) => {
                 const cover = [...(p.product_images ?? [])].sort(
                   (a, b) => a.sort_order - b.sort_order,
                 )[0];
@@ -244,6 +260,13 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
         </div>
       </Card>
       )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={changePage}
+      />
     </div>
   );
 }

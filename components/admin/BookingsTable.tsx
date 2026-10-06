@@ -12,6 +12,7 @@ import {
   inputClass,
 } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
+import Pagination from "./Pagination";
 import { PencilIcon, TrashIcon } from "./icons";
 
 type Row = Booking & { products: Pick<Product, "name"> };
@@ -33,10 +34,17 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
     q: string;
     status: string;
     period: string;
-  }>("admin-bookings-filters", { q: "", status: "all", period: "all" });
+    page: number;
+  }>("admin-bookings-filters", {
+    q: "",
+    status: "all",
+    period: "all",
+    page: 1,
+  });
   const query = filters.q as string;
   const statusFilter = filters.status as "all" | BookingStatus;
   const periodFilter = filters.period as PeriodFilter;
+  const page = filters.page;
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -59,6 +67,19 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
     }
     return true;
   });
+
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  function changePage(p: number) {
+    setFilter({ page: p });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function handleStatusChange(b: Row, status: BookingStatus) {
     setBusyId(b.id);
@@ -134,14 +155,14 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari customer, telepon, tema…"
             value={query}
-            onChange={(e) => setFilter({ q: e.target.value })}
+            onChange={(e) => setFilter({ q: e.target.value, page: 1 })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-40">
           <select
             value={statusFilter}
-            onChange={(e) => setFilter({ status: e.target.value })}
+            onChange={(e) => setFilter({ status: e.target.value, page: 1 })}
             className={inputClass}
             aria-label="Filter status booking"
           >
@@ -156,7 +177,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
         <div className="w-full sm:w-40">
           <select
             value={periodFilter}
-            onChange={(e) => setFilter({ period: e.target.value })}
+            onChange={(e) => setFilter({ period: e.target.value, page: 1 })}
             className={inputClass}
             aria-label="Filter periode acara"
           >
@@ -200,7 +221,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((b) => (
+              {pageRows.map((b) => (
                 <tr key={b.id} className="transition hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
                     {formatDate(b.event_date)}
@@ -262,6 +283,13 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
         </div>
       </Card>
       )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={changePage}
+      />
     </div>
   );
 }

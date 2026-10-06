@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Item, ItemType, ItemVariant } from "@/lib/types";
 import { Badge, Card, EmptyState, inputClass } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
+import Pagination from "./Pagination";
 import { LayersIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Item & {
@@ -26,10 +27,12 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
     q: string;
     type: string;
     low: boolean;
-  }>("admin-items-filters", { q: "", type: "all", low: false });
+    page: number;
+  }>("admin-items-filters", { q: "", type: "all", low: false, page: 1 });
   const query = filters.q as string;
   const typeFilter = filters.type as "all" | ItemType;
   const lowOnly = Boolean(filters.low);
+  const page = filters.page;
 
   const filtered = rows.filter((item) => {
     if (typeFilter !== "all" && item.type !== typeFilter) return false;
@@ -48,6 +51,19 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
     }
     return true;
   });
+
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  function changePage(p: number) {
+    setFilter({ page: p });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function handleDelete(item: Row) {
     if (
@@ -103,14 +119,14 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
             type="search"
             placeholder="Cari nama, kategori, varian…"
             value={query}
-            onChange={(e) => setFilter({ q: e.target.value })}
+            onChange={(e) => setFilter({ q: e.target.value, page: 1 })}
             className={inputClass}
           />
         </div>
         <div className="w-full sm:w-40">
           <select
             value={typeFilter}
-            onChange={(e) => setFilter({ type: e.target.value })}
+            onChange={(e) => setFilter({ type: e.target.value, page: 1 })}
             className={inputClass}
             aria-label="Filter tipe item"
           >
@@ -123,7 +139,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
           <input
             type="checkbox"
             checked={lowOnly}
-            onChange={(e) => setFilter({ low: e.target.checked })}
+            onChange={(e) => setFilter({ low: e.target.checked, page: 1 })}
             className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
           />
           Hanya stok rendah
@@ -162,7 +178,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((item) => {
+              {pageRows.map((item) => {
                 const low = lowStockCount(item.item_variants);
                 return (
                   <tr key={item.id} className="transition hover:bg-gray-50">
@@ -232,6 +248,13 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
         </div>
       </Card>
       )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={changePage}
+      />
     </div>
   );
 }

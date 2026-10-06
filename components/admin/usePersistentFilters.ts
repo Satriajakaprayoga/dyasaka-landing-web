@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export type FilterValue = string | boolean;
+export type FilterValue = string | boolean | number;
 
 /**
  * Filter state that survives navigation.
@@ -28,8 +28,14 @@ export function usePersistentFilters<T extends Record<string, FilterValue>>(
     for (const key of Object.keys(defaults)) {
       const value = searchParams.get(key);
       if (value !== null) {
-        init[key] =
-          typeof defaults[key] === "boolean" ? value === "true" : value;
+        if (typeof defaults[key] === "boolean") {
+          init[key] = value === "true";
+        } else if (typeof defaults[key] === "number") {
+          const parsed = Number(value);
+          init[key] = Number.isNaN(parsed) ? defaults[key] : parsed;
+        } else {
+          init[key] = value;
+        }
       }
     }
     return init as T;

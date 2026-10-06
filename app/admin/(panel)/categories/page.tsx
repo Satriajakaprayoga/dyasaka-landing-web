@@ -13,6 +13,7 @@ import {
   inputClass,
 } from "@/components/admin/ui";
 import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/admin/icons";
+import Pagination from "@/components/admin/Pagination";
 
 export default function CategoriesPage() {
   const router = useRouter();
@@ -24,6 +25,15 @@ export default function CategoriesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [page, setPage] = useState(1);
+
+  const PAGE_SIZE = 8;
+  const totalPages = Math.max(1, Math.ceil(categories.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = categories.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   async function loadCategories() {
     const { data } = await supabase
@@ -180,8 +190,9 @@ export default function CategoriesPage() {
             ))}
           </div>
         ) : categories.length > 0 ? (
-          <ul className="divide-y divide-gray-100">
-            {categories.map((c) => (
+          <>
+            <ul className="divide-y divide-gray-100">
+            {pageItems.map((c) => (
               <li
                 key={c.id}
                 className="flex items-center justify-between gap-3 px-4 py-3"
@@ -248,6 +259,16 @@ export default function CategoriesPage() {
               </li>
             ))}
           </ul>
+            <div className="border-t border-gray-100 px-4 py-3">
+              <Pagination
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={categories.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={(p) => setPage(p)}
+              />
+            </div>
+          </>
         ) : (
           <EmptyState
             title="Belum ada kategori"
