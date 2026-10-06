@@ -26,6 +26,10 @@ Submitted as a plain GET form; state lives in the URL (`?q=&category=&min_price=
 - `categories` — all rows for the filter dropdown.
 - `products` + `product_images(image_url, sort_order)` — filtered as above, ordered `created_at desc`. Cover image = lowest `sort_order`.
 
+## Pagination
+
+Server-side slicing, 12 cards per page. `?page=` is part of the URL; **Sebelumnya / Selanjutnya** links preserve all active filter params. Submitting the filter form drops `page` (fresh GET submission), so a new search always starts at page 1. Hidden when everything fits on one page.
+
 ## Interactions
 
 - Product card → `/product/[id]`.

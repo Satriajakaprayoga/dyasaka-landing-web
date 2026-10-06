@@ -19,7 +19,8 @@ Edit product master data and manage its photos.
 ## Form (`ProductForm`, edit mode)
 
 - Same fields as create, prefilled; adds **is_active** select (Aktif/Nonaktif — inactive products disappear from the public catalog).
-- Existing photos: rendered by `ExistingImage` with delete + reorder (`sort_order`).
+- Existing photos: rendered by `ExistingImage` with delete + reorder (`sort_order`). On save, remaining photos are renumbered to contiguous `0..n-1` before new uploads append after them (no `sort_order` collisions).
+- Photo validation, compression, and error handling: same pipeline as [products-new.md](products-new.md) — failed files stay selected on the form for retry, and removed photos are deleted from Storage.
 - Submits `PATCH /api/admin/products` with `{ id, …changes }`.
 
 ## Navigation

@@ -26,6 +26,14 @@ Manage the product catalog: scan, filter, edit, delete.
 
 Empty filter result shows a **Reset Filter** action.
 
+### Filter persistence
+
+Filters survive navigation (`usePersistentFilters`): URL params (`?q=&cat=&status=&page=`) are primary; sessionStorage (`admin-products-filters`) restores them when returning with a clean URL. **Reset Filter** clears both.
+
+## Pagination
+
+Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number is part of the persisted filter state; changing any filter resets to page 1; page changes scroll to top.
+
 ## Interactions
 
 - Row **Ubah** → `/admin/products/[id]/edit`.

@@ -24,6 +24,14 @@ Inventory master list: items (balloons, stands, cards, …) with variant counts 
 | Checkbox **Hanya stok rendah** | at least one variant with `stock_quantity <= reorder_point` (`lowStockCount`) |
 | Counter | "X dari Y item" |
 
+### Filter persistence
+
+Filters survive navigation (`usePersistentFilters`): URL params (`?q=&type=&low=&page=`) are primary; sessionStorage (`admin-items-filters`) restores them when returning with a clean URL. **Reset Filter** clears both.
+
+## Pagination
+
+Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number is part of the persisted filter state; changing any filter resets to page 1; page changes scroll to top.
+
 ## Interactions
 
 - Item name / **Varian** button → `/admin/items/[id]` (variant & stock management).
