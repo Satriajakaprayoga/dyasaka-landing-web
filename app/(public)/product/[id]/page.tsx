@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { buildWhatsAppInquiryLink } from '@/lib/booking-helpers';
 import { AvailabilityCalendar } from '@/components/AvailabilityCalendar';
 import ProductGallery from './ProductGallery';
+import BookingModal from './BookingModal';
 import type { Product, ProductImage } from '@/lib/types';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -190,6 +191,17 @@ export default async function ProductPage({ params }: { params: { id: string } }
               <WhatsAppIcon className="h-5 w-5" />
               Tanya via WhatsApp
             </a>
+
+            <div
+              className="my-3 flex items-center gap-3 text-xs text-gray-400"
+              aria-hidden="true"
+            >
+              <span className="h-px flex-1 bg-gray-200" />
+              atau langsung booking
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+
+            <BookingModal productId={product.id} productName={product.name} />
           </div>
 
           {recipeItems.length > 0 && (

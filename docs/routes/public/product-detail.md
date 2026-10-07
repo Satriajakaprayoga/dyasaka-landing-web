@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Product detail for customers: photo gallery, price, description, package contents ("Paket Termasuk"), WhatsApp inquiry CTA, and an inline availability calendar with month navigation.
+Product detail for customers: photo gallery with fullscreen zoom, price, description, package contents ("Paket Termasuk"), WhatsApp inquiry CTA, **a booking form (modal)**, and an inline availability calendar with month navigation.
 
 ## Data
 
@@ -18,6 +18,8 @@ Single cached fetch (`getProductData` wrapped in React `cache`, shared by the pa
 - `products` select `*, categories(name)` where `id = [id]` **and** `is_active = true` — inactive/unknown ids render `notFound()`.
 - `product_images` for the product, ordered `sort_order asc` (drives the gallery).
 - `product_items` select `id, quantity, item_variants(color, size, items(name))` — the recipe shown as "Paket Termasuk" (public read policies on `product_items`/`item_variants`/`items` were added specifically for this storefront display).
+
+**Booking insert**: the booking modal inserts into `bookings` as the anon role — allowed by the `"public insert bookings"` RLS policy (`supabase/migrations/20261007120000_public_booking_insert.sql`). The policy forces `status = 'pending'` / `project_status = 'not_started'` (DB defaults), requires an active product, future `event_date`, and sane input lengths. There is deliberately **no public SELECT** on bookings. The same migration makes `recalc_date_capacity()` SECURITY DEFINER (direct calls revoked) so the capacity trigger works for anon inserts — `date_capacity` stays read-only for clients. Requires a manual migration run before the feature works.
 
 ## SEO
 
@@ -28,6 +30,7 @@ Single cached fetch (`getProductData` wrapped in React `cache`, shared by the pa
 
 - **`ProductGallery`** (client island, same folder) — scroll-snap slider: native swipe on touch, arrow buttons (white circles, fade out at the edges), synced thumbnail strip (active border-pink-600), `1 / N` counter badge, keyboard ←/→ on the focused viewport. A tap (pointer-based, <8px movement — immune to scroll-snap click suppression) or the ⤢ button opens the lightbox. WAI-ARIA carousel pattern (`role="region"` + `aria-roledescription="carousel"`, slides as `group`s). Only the first photo is `priority` (LCP), the rest lazy-load; controls hidden for a single photo; "Belum ada foto" placeholder when empty.
 - **`Lightbox`** (client island, same folder) — fullscreen viewer (`fixed inset-0`, `z-[70]`, `role="dialog" aria-modal`) opened from the gallery; opens at the current photo and navigates back into the slider on change. Zoom 1–4×: wheel (at cursor, non-passive listener), double-click/double-tap (at point, toggles to 2.5×), pinch (two pointers), +/− buttons; pan by drag when zoomed (clamped to bounds); swipe/arrows/←→ to change photos (prev & next preloaded, hidden); Escape/X close, `0` resets zoom. History-integrated: `pushState` on open, back button/popstate closes the lightbox instead of leaving the page; body scroll locked; focus moves into the dialog on open and is restored on close; `quality={90}` for zoomed sharpness.
+- **`BookingModal`** (client island, same folder) — "Booking Sekarang" outline button under the WhatsApp CTA (with an "atau langsung booking" divider); opens a modal (`z-[80]`, bottom sheet on mobile / centered on desktop). Fields: Nama Lengkap*, No. WhatsApp* (8–15 digits), Tanggal Acara* (`min` = today), Alamat Acara*, Tema & Catatan optional; `maxLength` mirrors the RLS limits. Inserts `{product_id, customer_name, phone, event_date, event_address, theme?, message?}` — status fields rely on DB defaults; **no `.select()`** (anon has no SELECT on bookings, and PostgREST `RETURNING` would fail the insert). Success view: green check, status "menunggu konfirmasi", and a WhatsApp follow-up link (`buildWhatsAppInquiryLink` with the chosen date). Escape/backdrop/X close; scroll lock + focus management like the lightbox.
 - **`AvailabilityCalendar compact`** (`components/AvailabilityCalendar.tsx`, client island) — single-month view with `‹`/`›` navigation up to 6 months ahead, skeleton while loading, today ring, green = available / red strikethrough = full, legend. Reads only from `date_capacity` (no customer data).
 
 ## Layout
@@ -37,6 +40,7 @@ Single cached fetch (`getProductData` wrapped in React `cache`, shared by the pa
 ## Interactions
 
 - **Tanya via WhatsApp** — full-width green button in a gray card, opens `buildWhatsAppInquiryLink` (`lib/booking-helpers.ts`) with `NEXT_PUBLIC_BUSINESS_WA_NUMBER` and the product name; `target="_blank" rel="noopener noreferrer"`. Microcopy: "Konsultasi tema, tanggal, dan harga langsung dengan admin kami."
+- **Booking Sekarang** — opens the booking modal (see `BookingModal` above); the booking lands in the admin bookings list as `pending` / `not_started`.
 - **Paket Termasuk** — green-check list formatted `{quantity}× {item name} · {color}, {size}`; section hidden when the product has no recipe.
 - Calendar month navigation is clamped to today..+6 months.
 
