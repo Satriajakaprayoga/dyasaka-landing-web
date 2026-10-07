@@ -5,22 +5,36 @@ defined in `database-structure.md`. Each feature maps directly to tables and
 fields in that document — refer to it for schema details. This file focuses on
 behavior, flow, and what each screen/feature needs to do.
 
+> **Status update (Oct 2026):** the catalog and product detail pages have since
+> been redesigned, "Paket Termasuk" is implemented, and a customer-facing
+> booking form now exists on the product page (public insert-as-`pending` via
+> `supabase/migrations/20261007120000_public_booking_insert.sql`). The spec is
+> kept as written; differences from reality are noted inline.
+
 ---
 
-## 1. Customer-facing (existing, unchanged)
+## 1. Customer-facing
 
-These already exist in the current codebase and are not being redesigned —
-listed here only for completeness.
+These formed the original customer-facing surface — listed for completeness.
+Per the status note above, the catalog and product detail pages have since
+been redesigned.
 
 - Catalog browsing with search, category filter, and price range filter
+  *(since redesigned: filter chips, sorting, URL-driven state, pagination)*
 - Product detail page with image gallery and WhatsApp CTA
+  *(since redesigned: slider gallery with fullscreen zoom lightbox, plus the
+  booking modal below)*
 - Public availability calendar — standalone page and embedded on product pages
-- No customer-facing booking form; all bookings are entered by the admin after
-  negotiation happens on WhatsApp
+- ~~No customer-facing booking form; all bookings are entered by the admin
+  after negotiation happens on WhatsApp~~ — **Changed:** a "Booking Sekarang"
+  modal on the product page now lets customers insert a booking themselves;
+  it always lands as `pending`/unpaid and the admin still confirms it
+  (WhatsApp remains where the sale is negotiated and finalized)
 
 **New addition to product detail:** show which item variants are included in
 the package (e.g. "Includes: 50 Red Balloons, 1 Arch Stand"), so customers can
-see what they're getting without needing to ask.
+see what they're getting without needing to ask. — **Implemented** ("Paket
+Termasuk" on the product page).
 
 ---
 
@@ -188,7 +202,10 @@ pages.
 
 ## 6. Explicitly out of scope for this phase
 
-- Customer-facing booking form (sale is still closed via WhatsApp)
+- ~~Customer-facing booking form~~ — **built since the spec was written**: the
+  product-page modal inserts a `pending` booking directly via the public RLS
+  insert policy; the sale is still confirmed and closed on WhatsApp by the
+  admin
 - Multi-admin roles / permissions beyond the existing single-admin auth
 - Purchase order automation from "needs ordering" flags
 - Multi-day / date-range bookings (current model assumes a single

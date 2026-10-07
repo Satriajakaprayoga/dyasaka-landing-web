@@ -8,14 +8,19 @@
 ## Setup
 
 1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL editor — this creates
-   all tables, the capacity-tracking trigger, and RLS policies.
-3. Create a Storage bucket named `product-images` (public read).
-4. Copy `.env.local.example` to `.env.local` and fill in:
+2. In the Supabase SQL editor run `supabase/schema.sql` (tables, the
+   capacity-tracking trigger, base RLS policies), then every file in
+   `supabase/migrations/` in filename order — later migrations modernize
+   the storage policies and open public booking inserts.
+3. Create a Storage bucket named `product-images` (the
+   `20261006120000_modernize_storage_policies.sql` migration makes it
+   public and adds the policies).
+4. Create `.env.local` and fill in:
    ```
    NEXT_PUBLIC_SUPABASE_URL=your-project-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
    NEXT_PUBLIC_BUSINESS_WA_NUMBER=your-wa-number
+   NEXT_PUBLIC_SITE_URL=your-public-url   # optional, used for JSON-LD
    ```
 5. `npm install && npm run dev`
 
@@ -24,18 +29,22 @@
 ```
 app/
   catalog/               # product grid, category + price filters, search
-  product/[id]/          # product detail, WA inquiry CTA, embedded availability calendar
+  product/[id]/          # detail: gallery + lightbox, WA inquiry, booking modal, availability calendar
   availability/          # standalone availability calendar page
   admin/
     login/               # admin sign-in (Supabase Auth)
     page.tsx             # dashboard home
     products/            # list + new (with photo upload to Storage)
-    categories/          # list + inline add
-    bookings/            # list + new (product, theme, message, customer, date)
+    categories/          # CRUD (inline rename, pagination)
+    bookings/            # list + new + edit (status workflow)
+    items/               # inventory: items, variants, stock movements
   api/admin/
-    products/            # POST create product
-    categories/          # POST create category
-    bookings/            # POST create, PATCH update booking
+    products/            # JSON CRUD (session required)
+    categories/          # JSON CRUD (session required)
+    bookings/            # JSON CRUD (session required)
+    items/               # JSON CRUD (session required)
+    item-variants/       # JSON CRUD (session required)
+    stock-movements/     # POST record stock movement
 components/
   AvailabilityCalendar.tsx  # shared read-only calendar, used standalone + embedded
 lib/
@@ -45,35 +54,43 @@ lib/
   booking-helpers.ts     # date-capacity lookups + WhatsApp inquiry link builder
 supabase/
   schema.sql             # full DB schema, trigger, RLS policies
+  migrations/            # incremental SQL migrations (run in filename order)
 middleware.ts             # protects /admin/* — redirects to /admin/login if not signed in
 ```
 
 ## How booking + capacity works
 
-There is no client-facing booking form. The flow is:
+Customers can book in two ways:
 
-1. Customer browses `/catalog` (filter by category/price, or search), opens
-   a product, and taps a WhatsApp button (`buildWhatsAppInquiryLink`) to ask
-   about a date/theme directly with the admin.
-2. Customer can check `/availability`, or the compact calendar embedded on
-   the product page, to see which dates are already full — both read only
-   from `date_capacity`, never from `bookings`, so customer contact info is
-   never exposed publicly. Capacity is tracked globally (one calendar for
-   the whole business), not per product.
-3. Once the admin and customer agree over WhatsApp, the admin logs into
-   `/admin` and adds the booking via `/admin/bookings/new` — product,
-   theme, message, customer name/phone/address, event date, status.
-4. A Postgres trigger (`bookings_after_change`) recalculates
-   `date_capacity.booked_count` automatically whenever a `confirmed`
-   booking is inserted, updated, or deleted — so the public calendar
-   updates immediately and admin never edits the count by hand.
-5. `/admin/bookings` lists all bookings so the admin can track status
-   over time (`pending` → `confirmed` → `done`, or `cancelled`).
+1. **Self-service booking** — on a product page, "Booking Sekarang" opens
+   a modal form (name, WhatsApp number, event date/address, optional
+   theme/notes) that inserts directly into `bookings` as the anonymous
+   role. The `public insert bookings` RLS policy forces the row to
+   `pending`/`not_started`, requires an active product and a future
+   date, and there is no public SELECT on `bookings` — visitors can
+   create bookings but never read them (migration
+   `20261007120000_public_booking_insert.sql`).
+2. **Admin manual entry** — the classic flow: the customer asks via the
+   WhatsApp button (`buildWhatsAppInquiryLink`) or follows up after
+   booking, and the admin records/adjusts it under `/admin/bookings`.
+
+Availability stays safe either way:
+
+- Customers only ever read `date_capacity` (the compact calendar on the
+  product page and `/availability`); `bookings`, which holds customer
+  contact info, has no public SELECT policy.
+- Capacity is tracked globally (one calendar for the whole business),
+  not per product.
+- A Postgres trigger (`bookings_after_change`) recalculates
+  `date_capacity.booked_count` on every insert/update/delete. Its
+  helper `recalc_date_capacity()` is SECURITY DEFINER so the counter
+  maintenance also works for anonymous inserts while `date_capacity`
+  itself stays read-only for clients.
+- Bookings move `pending` → `confirmed` → `done` (or `cancelled`) from
+  the admin list; the public calendar updates as soon as a booking is
+  confirmed.
 
 ## Still to build
 
-- Product edit/delete + category edit/delete (currently create + list only)
-- Booking edit screen (API supports PATCH already, just needs a UI)
-- Homepage (`/`) with hero + featured categories
 - Seed data / first admin user (create via Supabase Auth dashboard, since
   there's no public sign-up — single admin only)

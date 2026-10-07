@@ -13,7 +13,7 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 | --- | --- | --- |
 | `/` | [public/home.md](public/home.md) | Landing page, CTAs to catalog & availability |
 | `/catalog` | [public/catalog.md](public/catalog.md) | Active products with search + filters (URL params), pagination |
-| `/product/[id]` | [public/product-detail.md](public/product-detail.md) | Product gallery, price, WhatsApp inquiry, availability calendar |
+| `/product/[id]` | [public/product-detail.md](public/product-detail.md) | Gallery + lightbox, price, WhatsApp inquiry, booking modal, availability calendar |
 | `/availability` | [public/availability.md](public/availability.md) | Public availability calendar (7 months ahead) |
 
 ## Admin panel (`app/admin/(panel)` — session required)

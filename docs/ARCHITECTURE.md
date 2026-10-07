@@ -14,13 +14,14 @@ audiences from one codebase:
 
 | Audience | Surface | Purpose |
 |---|---|---|
-| Customers | `/`, `/catalog`, `/product/[id]`, `/availability` | Browse packages, check date availability, initiate contact |
-| Owner (single admin) | `/admin/*` + `/api/admin/*` | Manage catalog and record bookings after off-platform negotiation |
+| Customers | `/`, `/catalog`, `/product/[id]`, `/availability` | Browse packages, check date availability, book or initiate contact |
+| Owner (single admin) | `/admin/*` + `/api/admin/*` | Manage catalog and bookings, confirm incoming requests |
 
-The defining business insight of this project: **the sale is closed on WhatsApp,
-not on the website.** The site is a storefront and availability checker; the
-booking itself is entered by the admin after negotiating with the customer over
-WhatsApp. There is deliberately no customer-facing booking form.
+The defining business insight of this project: **the sale is finalized on
+WhatsApp, not on the website.** Customers can now create a booking themselves
+from the product page — but it always lands as `pending` and unpaid, and the
+admin confirms/adjusts it (traditionally after negotiating over WhatsApp, the
+`buildWhatsAppInquiryLink` CTA remains the primary conversation starter).
 
 UI copy is Indonesian (`lang="id"`, prices formatted `Rp x.xxx` via
 `toLocaleString('id-ID')`, calendar headers in Indonesian), confirming the
@@ -74,7 +75,7 @@ There is no custom server, no separate API service, no other database. Supabase
                         │   ├─ categories, products,          │
                         │   │  product_images                 │
                         │   ├─ date_capacity  ◄── trigger ──  │
-                        │   └─ bookings (admin-only)          │
+                        │   └─ bookings (admin w + pub ins)   │
                         │  Auth (email/password)              │
                         │  Storage (product-images, public r) │
                         └─────────────────────────────────────┘
@@ -134,7 +135,12 @@ categories 1───* products 1───* product_images
 - **`bookings`** — a recorded sale. Holds customer PII (`customer_name`,
   `phone`, `event_address`). `status` is constrained to
   `'pending' | 'confirmed' | 'done' | 'cancelled'`. **No RLS select policy for
-  anon exists at all** — the public literally cannot read bookings.
+  anon exists at all** — the public literally cannot read bookings. Anon
+  *can* INSERT, though: the `public insert bookings` policy
+  (20261007120000_public_booking_insert.sql) powers the storefront booking
+  modal, with a `WITH CHECK` that forces `status = 'pending'` /
+  `project_status = 'not_started'`, requires an active product and a future
+  date, and bounds input lengths.
 
 ### The capacity trigger (`recalc_date_capacity` / `bookings_after_change`)
 
@@ -158,6 +164,11 @@ Interpretation:
   time it is touched — so rows only exist for dates that have booking history.
   Missing rows are interpreted by the app as "fully open"
   (`isDateAvailable` in lib/booking-helpers.ts:29).
+- Since public booking inserts exist, `recalc_date_capacity()` runs as
+  **SECURITY DEFINER** (same migration): the trigger executes with the
+  inserting role's privileges, and anon must not be able to write
+  `date_capacity` — so the counter maintenance runs as the table owner
+  instead, with direct `EXECUTE` revoked from every role.
 
 ---
 
@@ -179,17 +190,22 @@ The README describes the flow; here is *why* it is shaped this way.
    and addresses are structurally unreachable by anon clients because there is
    no anon select policy on `bookings` to begin with.
 
-3. **Contact** — The only CTA is "Tanya via WhatsApp"
-   (`buildWhatsAppInquiryLink`, lib/booking-helpers.ts:46), a `wa.me` deep link
-   with a prefilled Indonesian message naming the package. Price, theme, date,
-   and payment are negotiated off-platform. The business number comes from
-   `NEXT_PUBLIC_BUSINESS_WA_NUMBER`.
+3. **Contact / booking** — Two CTAs sit in the buy box. "Tanya via WhatsApp"
+   (`buildWhatsAppInquiryLink`, lib/booking-helpers.ts) opens a `wa.me` deep
+   link with a prefilled Indonesian message naming the package. "Booking
+   Sekarang" opens the `BookingModal` form (name, WhatsApp number, event
+   date/address, optional theme/notes) and inserts the booking **directly
+   from the browser as anon** — no API route involved; the RLS
+   `WITH CHECK` clause is the server-side validation. The insert
+   deliberately omits `.select()` (no anon SELECT policy means PostgREST
+   `RETURNING` would fail the statement). The modal shows a success view
+   with a WhatsApp follow-up link carrying the chosen date.
 
-4. **Booking recording** — The admin opens `/admin/bookings/new` and enters
-   the agreed details. POST /api/admin/bookings verifies the session, inserts
-   the row, and the trigger updates the public calendar instantly. Status
-   defaults to `confirmed` since the deal is already agreed (a `pending`
-   option exists for soft reservations).
+4. **Booking confirmation** — Self-service bookings land in
+   `/admin/bookings` as `pending`/`not_started`; the admin confirms them
+   (or enters WhatsApp-negotiated deals manually via `/admin/bookings/new`,
+   where status can default to `confirmed`). The trigger updates the
+   public calendar the moment a booking becomes `confirmed`.
 
 5. **Lifecycle tracking** — `/admin/bookings` lists bookings ordered by event
    date with color-coded status. `PATCH /api/admin/bookings` supports status
@@ -211,11 +227,13 @@ Defense is layered, and the deepest layer is the database:
    because API routes are *not* covered by the middleware matcher.
 
 3. **RLS (the real boundary)** —
-   - anon: `SELECT` on categories, active products, images, `date_capacity`. Nothing else.
+   - anon: `SELECT` on categories, active products, images, `date_capacity`,
+     plus a tightly constrained `INSERT` on `bookings` (pending-only,
+     active product, future date — see §4). Nothing else.
    - `authenticated`: full CRUD on everything, via `auth.role() = 'authenticated'`.
-   - Storage: mirrored policies on `storage.objects` for the `product-images`
-     bucket — authenticated write, public read
-     (supabase/migrations/20260910231042_storage_policies_product_images.sql).
+   - Storage: policies on `storage.objects` for the `product-images` bucket —
+     authenticated write, public read, bucket forced public
+     (modernized by supabase/migrations/20261006120000_modernize_storage_policies.sql).
 
 **Assumption to be aware of:** "admin" is modeled as *any* authenticated user.
 There is no role table or `is_admin` claim. This is coherent for a
@@ -233,18 +251,20 @@ app/                     Next.js App Router
   page.tsx               Static hero homepage (links to catalog/availability)
   layout.tsx             Shell: header nav, metadata, lang="id"
   catalog/page.tsx       RSC; reads searchParams, queries products+categories
-  product/[id]/page.tsx  RSC; product + images + WhatsApp CTA + <AvailabilityCalendar compact/>
+  product/[id]/page.tsx  RSC; product + images; islands: ProductGallery,
+                         Lightbox (zoom), BookingModal (anon insert), calendar
   availability/page.tsx  Thin wrapper around the calendar (7 months)
   admin/
     login/               CSR; signInWithPassword → redirect /admin
     page.tsx             RSC dashboard (product count, pending-booking count)
-    products/            RSC list + CSR "new" form (photo upload)
-    categories/          CSR list + inline add/delete
-    bookings/            RSC list + CSR "new" form
-  api/admin/             POST products, POST categories, POST+PATCH bookings
+    products/            RSC list + CSR "new"/"edit" forms (photo upload)
+    categories/          CSR list + CRUD (pagination)
+    bookings/            RSC list (inline status) + CSR "new"/"edit" forms
+  api/admin/             JSON CRUD endpoints for all admin tables (session-checked)
 components/
-  AvailabilityCalendar   The only shared component; client-side month grid,
-                         reads date_capacity for [today, today+N months]
+  AvailabilityCalendar   Shared client month grid, reads date_capacity;
+                         compact mode embeds on the product page
+  BalloonIcon            Shared SVG used by catalog/product empty states
 lib/
   supabase.ts            Browser client (+ a leftover connection self-test)
   supabase-server.ts     Cookie-bound server client
@@ -268,24 +288,24 @@ management; each page fetches what it needs.
 Findings from reading the code (not bugs in the business logic, but worth
 knowing):
 
-- **Debug leftovers.** `checkConnection()` in lib/supabase.ts:18 runs a query
-  and logs on every load of the browser client module. The calendar cell has an
-  `onClick` that `alert()`s the raw capacity map (components/AvailabilityCalendar.tsx:113).
+- **Debug leftover.** `checkConnection()` in lib/supabase.ts:18 runs a query
+  and logs on every load of the browser client module.
 - **Capacity default mismatch.** `isDateAvailable` defaults to capacity 1, but
   the calendar calls it with `defaultCapacity = 2`
-  (components/AvailabilityCalendar.tsx:107) — a missing `date_capacity` row is
+  (components/AvailabilityCalendar.tsx:170) — a missing `date_capacity` row is
   therefore treated as allowing 2 events, while the helper's own default says 1.
 - **`auth.role() = 'authenticated'` as admin check** — see §6; fine for one
   owner, not for multi-user.
-- **Half-finished CRUD.** Products and categories support create + list (+ delete
-  for categories); no edit UI, no product delete. Booking PATCH exists in the
-  API but has no UI — status changes currently require a manual API call.
+- **Public booking inserts have no rate limiting.** RLS validates shape and
+  constraints but cannot throttle; a determined spammer could flood
+  `bookings` with pending rows (they can never read them back). If this ever
+  matters, add a CAPTCHA edge function or a per-IP limit before the insert.
 - **Admin pages use the anon-key client everywhere.** This works because RLS
   recognizes the admin session, but note the pattern: the app has no
   service-role usage at all, by design.
 - **No tests, no lint config, no CI** — a single-developer business tool.
-- **Homepage is minimal** (hero + two links); README lists it as "still to build"
-  for featured categories.
+- **Homepage is minimal** (hero + two links); featured categories remain
+  unbuilt.
 
 ---
 
@@ -295,6 +315,7 @@ Dyasaka Decoration is a well-scoped example of a **Supabase-first storefront**:
 the Next.js app is mostly a rendering layer, while the interesting logic —
 capacity accounting, authorization, privacy separation — lives in the database
 as triggers and RLS policies. The product decisions (WhatsApp-first sales,
-admin-entered bookings, global daily capacity, public aggregate-only calendar)
-all follow from one constraint: a small service business that closes sales in
-chat, but wants a professional catalog and an honest view of its calendar online.
+pending-only self-service bookings, global daily capacity, public
+aggregate-only calendar) all follow from one constraint: a small service
+business that finalizes sales in chat, but wants a professional catalog,
+a booking entry point, and an honest view of its calendar online.

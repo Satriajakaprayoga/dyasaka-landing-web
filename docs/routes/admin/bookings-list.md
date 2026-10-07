@@ -14,6 +14,7 @@ Manage all event bookings: schedule overview, status workflow, edits.
 ## Data
 
 - `bookings` + `products(name)`, ordered `event_date asc`.
+- Bookings arrive from two sources: manual admin entry (`/admin/bookings/new`) and **self-service booking on the public product page** — the latter insert directly as `pending` / `not_started` via the `"public insert bookings"` RLS policy (`supabase/migrations/20261007120000_public_booking_insert.sql`) and wait here for confirmation.
 
 ## Search & filters (client-side, in `BookingsTable`)
 

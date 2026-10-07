@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Record a booking taken from a WhatsApp conversation.
+Record a booking manually — taken from a WhatsApp conversation or a phone call. Customers can also book themselves from the public product page; those bookings arrive directly as `pending` without admin action (see `public/product-detail.md`).
 
 ## Data
 
