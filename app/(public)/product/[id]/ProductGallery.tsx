@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { BalloonIcon } from "@/components/BalloonIcon";
+import Lightbox from "./Lightbox";
 
 type GalleryImage = { id: string; image_url: string };
 
@@ -20,8 +21,32 @@ export default function ProductGallery({
   images: GalleryImage[];
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const [active, setActive] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const total = images.length;
+
+  // Open the lightbox on a tap. Pointer-based (not onClick) because click
+  // events are unreliable on scroll-snap containers — browsers suppress
+  // them after snap adjustments, especially on touch.
+  const handleTrackPointerDown = useCallback((e: React.PointerEvent) => {
+    tapStart.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+  }, []);
+
+  const handleTrackPointerUp = useCallback((e: React.PointerEvent) => {
+    const start = tapStart.current;
+    tapStart.current = null;
+    if (!start) return;
+    const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+    if (moved < 8 && Date.now() - start.t < 400) setLightboxOpen(true);
+  }, []);
+
+  // Keep the slider in sync when photos are navigated inside the lightbox.
+  const handleLightboxNavigate = useCallback((index: number) => {
+    setActive(index);
+    const track = trackRef.current;
+    if (track) track.scrollTo({ left: index * track.clientWidth, behavior: "auto" });
+  }, []);
 
   const scrollTo = useCallback(
     (index: number) => {
@@ -44,6 +69,7 @@ export default function ProductGallery({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (lightboxOpen) return; // the lightbox handles keys while open
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         scrollTo(active - 1);
@@ -52,7 +78,7 @@ export default function ProductGallery({
         scrollTo(active + 1);
       }
     },
-    [active, scrollTo]
+    [active, lightboxOpen, scrollTo]
   );
 
   if (total === 0) {
@@ -79,7 +105,12 @@ export default function ProductGallery({
         <div
           ref={trackRef}
           onScroll={handleScroll}
-          className="flex h-full w-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onPointerDown={handleTrackPointerDown}
+          onPointerUp={handleTrackPointerUp}
+          onPointerCancel={() => {
+            tapStart.current = null;
+          }}
+          className="flex h-full w-full cursor-zoom-in snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {images.map((img, i) => (
             <div
@@ -150,7 +181,41 @@ export default function ProductGallery({
             </span>
           </>
         )}
+
+        <button
+          type="button"
+          aria-label="Lihat foto layar penuh"
+          title="Lihat foto layar penuh"
+          onClick={() => setLightboxOpen(true)}
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-md backdrop-blur transition hover:bg-white active:scale-95"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
+            <path d="M15 3h6v6" />
+            <path d="M9 21H3v-6" />
+            <path d="M21 3l-7 7" />
+            <path d="M3 21l7-7" />
+          </svg>
+        </button>
       </div>
+
+      {lightboxOpen && (
+        <Lightbox
+          name={name}
+          images={images}
+          index={active}
+          onClose={() => setLightboxOpen(false)}
+          onNavigate={handleLightboxNavigate}
+        />
+      )}
 
       {multiple && (
         <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-6">
