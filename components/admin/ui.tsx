@@ -1,4 +1,4 @@
-import type { BookingStatus } from "@/lib/types";
+import type { BookingStatus, ProjectStatus, RentalStatus } from "@/lib/types";
 import Link from "next/link";
 import { ArrowLeftIcon, InboxIcon } from "./icons";
 
@@ -152,6 +152,31 @@ const bookingStatusMap: Record<BookingStatus, { label: string; tone: BadgeTone }
 
 export function BookingStatusBadge({ status }: { status: BookingStatus }) {
   const s = bookingStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+const projectStatusMap: Record<ProjectStatus, { label: string; tone: BadgeTone }> = {
+  not_started: { label: "Belum Mulai", tone: "gray" },
+  preparing: { label: "Persiapan", tone: "amber" },
+  ready: { label: "Siap", tone: "blue" },
+  in_progress: { label: "Berlangsung", tone: "green" },
+  returning: { label: "Pengembalian", tone: "amber" },
+  completed: { label: "Proyek Selesai", tone: "blue" },
+};
+
+export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  const s = projectStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+const rentalStatusMap: Record<RentalStatus, { label: string; tone: BadgeTone }> = {
+  reserved: { label: "Direservasi", tone: "gray" },
+  checked_out: { label: "Sedang Keluar", tone: "amber" },
+  returned: { label: "Sudah Kembali", tone: "green" },
+};
+
+export function RentalStatusBadge({ status }: { status: RentalStatus }) {
+  const s = rentalStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 

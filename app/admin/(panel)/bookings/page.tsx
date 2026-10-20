@@ -36,7 +36,7 @@ async function BookingsList() {
     .from("bookings")
     .select("*, products(name)")
     .order("event_date", { ascending: true })
-    .returns<(Booking & { products: Pick<Product, "name"> })[]>();
+    .returns<(Booking & { products: Pick<Product, "name"> | null })[]>();
 
   return <BookingsTable rows={bookings ?? []} />;
 }

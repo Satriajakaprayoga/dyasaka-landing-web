@@ -30,6 +30,8 @@ export default function BookingForm({ products, booking }: Props) {
     theme: booking?.theme ?? '',
     message: booking?.message ?? '',
     status: booking?.status ?? 'confirmed',
+    transport_fee:
+      booking?.transport_fee != null ? String(booking.transport_fee) : '',
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -43,11 +45,17 @@ export default function BookingForm({ products, booking }: Props) {
     setSubmitting(true);
     setError(null);
 
+    const payload = {
+      ...form,
+      product_id: form.product_id || null,
+      transport_fee: form.transport_fee === '' ? null : Number(form.transport_fee),
+    };
+
     const res = await fetch('/api/admin/bookings', {
       method: isEdit ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(
-        isEdit ? { id: booking!.id, ...form } : form,
+        isEdit ? { id: booking!.id, ...payload } : payload,
       ),
     });
 
@@ -59,7 +67,15 @@ export default function BookingForm({ products, booking }: Props) {
       return;
     }
 
-    router.push('/admin/bookings');
+    if (isEdit) {
+      router.push('/admin/bookings');
+      router.refresh();
+      return;
+    }
+
+    // New booking → continue on the detail page (seed items, checklist).
+    const body = await res.json();
+    router.push(`/admin/bookings/${body.booking.id}`);
     router.refresh();
   }
 
@@ -69,18 +85,34 @@ export default function BookingForm({ products, booking }: Props) {
         <div>
           <label className={labelClass}>Produk</label>
           <select
-            required
             value={form.product_id}
             onChange={(e) => update('product_id', e.target.value)}
             className={inputClass}
           >
-            <option value="">Pilih produk</option>
+            <option value="">— Custom / tanpa paket —</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-gray-400">
+            {form.product_id
+              ? 'Item paket diisi otomatis. Item dapat diubah di halaman detail booking setelah disimpan.'
+              : 'Item dapat diubah di halaman detail booking setelah disimpan.'}
+          </p>
+        </div>
+
+        <div>
+          <label className={labelClass}>Biaya Transport (Rp, opsional)</label>
+          <input
+            type="number"
+            min={0}
+            placeholder="mis. 150000"
+            value={form.transport_fee}
+            onChange={(e) => update('transport_fee', e.target.value)}
+            className={inputClass}
+          />
         </div>
 
         <div>

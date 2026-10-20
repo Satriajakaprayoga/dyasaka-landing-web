@@ -18,8 +18,9 @@ Edit any booking field or its status.
 
 ## Form (`BookingForm`, edit mode)
 
-- All create-mode fields prefilled plus the full status select (pending / confirmed / done / cancelled).
-- Submits `PATCH /api/admin/bookings` with `{ id, …changes }`; changing `event_date` re-triggers the capacity recalculation.
+- All create-mode fields prefilled plus the full status select (pending / confirmed / done / cancelled) and the optional **Biaya Transport** field. Product can be switched or cleared to "— Custom / tanpa paket —".
+- Submits `PATCH /api/admin/bookings` with `{ id, …changes }` (API applies an allow-list); changing `event_date` re-triggers the capacity recalculation. Note: switching the product here does not re-seed `booking_items` — edit items on the detail page.
+- On success redirects back to `/admin/bookings`.
 
 ## Navigation
 

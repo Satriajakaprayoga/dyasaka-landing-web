@@ -212,6 +212,18 @@ The README describes the flow; here is *why* it is shaped this way.
    transitions (`pending → confirmed → done`, or `cancelled`), and the trigger
    recalculates capacity on every change (e.g. cancelling frees the date).
 
+   A second trigger on the same table, `trg_bookings_generate_checklist`
+   (20261020120000_booking_workflow.sql), runs **alongside** the capacity
+   trigger with disjoint responsibilities: when `dp_received_at` is set
+   (first time only — the function bails out when checklist rows already
+   exist), it seeds the 3-phase checklist (`stock_check` / `pickup` /
+   `return`, the last only for rentable items) from the booking's
+   `booking_items`. A companion trigger on `checklist_items`
+   (`trg_checklist_items_done`) syncs `booking_items.rental_status` when
+   pickup/return rows are marked done. Like the capacity trigger, both run
+   as SECURITY DEFINER with direct EXECUTE revoked — internal maintenance
+   that clients must never invoke directly.
+
 ---
 
 ## 6. Security model

@@ -13,7 +13,7 @@ Manage all event bookings: schedule overview, status workflow, edits.
 
 ## Data
 
-- `bookings` + `products(name)`, ordered `event_date asc`.
+- `bookings` + `products(name)`, ordered `event_date asc`. `products` is null for custom bookings → Produk cell shows "Custom".
 - Bookings arrive from two sources: manual admin entry (`/admin/bookings/new`) and **self-service booking on the public product page** — the latter insert directly as `pending` / `not_started` via the `"public insert bookings"` RLS policy (`supabase/migrations/20261007120000_public_booking_insert.sql`) and wait here for confirmation.
 
 ## Search & filters (client-side, in `BookingsTable`)
@@ -35,7 +35,8 @@ Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number i
 
 ## Interactions
 
-- Inline status `<select>` per row → `PATCH /api/admin/bookings` `{ id, status }` → refresh. Status badge under the select mirrors the change.
+- Inline status `<select>` per row → `PATCH /api/admin/bookings` `{ id, status }` → refresh. Status badge + **project status badge** under the select mirror the change.
+- Date and customer-name cells link to `/admin/bookings/[id]` (the operational detail page).
 - **Ubah** → `/admin/bookings/[id]/edit`.
 - **Hapus** → `confirm()` → `DELETE /api/admin/bookings?id=` → refresh. The DB trigger recalculates `date_capacity.booked_count` on delete.
 

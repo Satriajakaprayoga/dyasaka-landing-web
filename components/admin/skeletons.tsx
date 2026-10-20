@@ -86,3 +86,43 @@ export function VariantsPanelSkeleton() {
     </div>
   );
 }
+
+// Dashboard operational-section fallback: card with icon + two text lines.
+export function DashboardSectionSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <Card aria-busy="true">
+      <div className="space-y-4 p-4">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// Booking detail fallback: the two side-by-side panels (items + checklist).
+export function BookingPanelsSkeleton() {
+  return (
+    <div aria-busy="true" className="grid gap-6 lg:grid-cols-2">
+      {[0, 1].map((panel) => (
+        <Card key={panel}>
+          <div className="space-y-3 p-4">
+            <Skeleton className="h-5 w-32" />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-4 flex-1" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
