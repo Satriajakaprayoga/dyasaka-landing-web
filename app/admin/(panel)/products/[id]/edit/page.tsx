@@ -2,6 +2,10 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { notFound } from "next/navigation";
 import type { Category } from "@/lib/types";
 import ProductForm from "@/components/admin/ProductForm";
+import RecipePanel, {
+  type RecipeCatalogItem,
+  type RecipeRow,
+} from "@/components/admin/RecipePanel";
 import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
 export default async function EditProductPage({
@@ -11,21 +15,37 @@ export default async function EditProductPage({
 }) {
   const supabase = createServerSupabase();
 
-  const [{ data: product }, { data: categories }] = await Promise.all([
+  const [
+    { data: product },
+    { data: categories },
+    { data: catalog },
+  ] = await Promise.all([
     supabase
       .from("products")
-      .select("*, product_images(*)")
+      .select(
+        "*, product_images(*), product_items(id, product_id, item_variant_id, quantity, item_variants(color, size, current_price, items(name)))",
+      )
       .eq("id", params.id)
       .single(),
     supabase.from("categories").select("*").order("name"),
+    supabase
+      .from("items")
+      .select(
+        "id, name, item_category, type, quantity_owned, item_variants(id, color, size, current_price)",
+      )
+      .order("name"),
   ]);
 
   if (!product) {
     notFound();
   }
 
+  // Child→parent embeds come back as objects, not arrays.
+  const recipe = (product.product_items ?? []) as unknown as RecipeRow[];
+  const catalogItems = (catalog ?? []) as unknown as RecipeCatalogItem[];
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4">
           <Breadcrumbs
@@ -44,10 +64,18 @@ export default async function EditProductPage({
         <p className="mt-1 text-sm text-gray-500">{product.name}</p>
       </div>
 
-      <ProductForm
-        categories={(categories ?? []) as Category[]}
-        product={product}
-      />
+      <div className="space-y-8">
+        <ProductForm
+          categories={(categories ?? []) as Category[]}
+          product={product}
+        />
+
+        <RecipePanel
+          productId={product.id}
+          productItems={recipe}
+          catalog={catalogItems}
+        />
+      </div>
     </div>
   );
 }

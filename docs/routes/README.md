@@ -22,13 +22,14 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
-| `/admin` | [admin/dashboard.md](admin/dashboard.md) | Stats cards + upcoming bookings |
+| `/admin` | [admin/dashboard.md](admin/dashboard.md) | Stats cards, upcoming bookings, 4 operational views (prep / checked-out / low stock / need order) |
 | `/admin/login` | [admin/login.md](admin/login.md) | Standalone login (email/password) |
 | `/admin/products` | [admin/products-list.md](admin/products-list.md) | Product list, search/filters, pagination, delete |
 | `/admin/products/new` | [admin/products-new.md](admin/products-new.md) | Create product + upload photos |
-| `/admin/products/[id]/edit` | [admin/products-edit.md](admin/products-edit.md) | Edit product, manage photos, is_active |
+| `/admin/products/[id]/edit` | [admin/products-edit.md](admin/products-edit.md) | Edit product, manage photos, is_active, recipe ("Isi Paket") |
 | `/admin/bookings` | [admin/bookings-list.md](admin/bookings-list.md) | Booking list, search/filters, pagination, inline status change |
-| `/admin/bookings/new` | [admin/bookings-new.md](admin/bookings-new.md) | Record a new booking |
+| `/admin/bookings/new` | [admin/bookings-new.md](admin/bookings-new.md) | Record a new booking (product or custom) |
+| `/admin/bookings/[id]` | [admin/bookings-detail.md](admin/bookings-detail.md) | Booking detail: item snapshot, 3-phase checklist, DP + project status |
 | `/admin/bookings/[id]/edit` | [admin/bookings-edit.md](admin/bookings-edit.md) | Edit booking details/status |
 | `/admin/items` | [admin/items-list.md](admin/items-list.md) | Inventory list, search/filters, pagination, low-stock badge |
 | `/admin/items/new` | [admin/items-new.md](admin/items-new.md) | Create item (consumable/rentable) with category autocomplete |
@@ -42,8 +43,11 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | --- | --- | --- |
 | `/api/admin/products` | [api/admin-products.md](api/admin-products.md) | POST, PATCH, DELETE |
 | `/api/admin/categories` | [api/admin-categories.md](api/admin-categories.md) | POST, PATCH, DELETE |
-| `/api/admin/bookings` | [api/admin-bookings.md](api/admin-bookings.md) | POST, PATCH, DELETE |
+| `/api/admin/bookings` | [api/admin-bookings.md](api/admin-bookings.md) | POST (optional product + recipe seeding), PATCH (allow-list), DELETE |
 | `/api/admin/items` | [api/admin-items.md](api/admin-items.md) | POST, PATCH, DELETE |
+| `/api/admin/product-items` | [api/admin-product-items.md](api/admin-product-items.md) | POST (upsert), PATCH, DELETE |
+| `/api/admin/booking-items` | [api/admin-booking-items.md](api/admin-booking-items.md) | POST (checklist catch-up), PATCH, DELETE |
+| `/api/admin/checklist-items` | [api/admin-checklist-items.md](api/admin-checklist-items.md) | POST (free-text row), PATCH, DELETE |
 | `/api/admin/item-variants` | [api/admin-item-variants.md](api/admin-item-variants.md) | POST, PATCH, DELETE |
 | `/api/admin/stock-movements` | [api/admin-stock-movements.md](api/admin-stock-movements.md) | POST |
 

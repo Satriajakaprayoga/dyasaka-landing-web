@@ -8,14 +8,15 @@ import {
   BookingStatusBadge,
   Card,
   EmptyState,
+  ProjectStatusBadge,
   formatDate,
   inputClass,
 } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
 import Pagination from "./Pagination";
-import { PencilIcon, TrashIcon } from "./icons";
+import { EyeIcon, PencilIcon, TrashIcon } from "./icons";
 
-type Row = Booking & { products: Pick<Product, "name"> };
+type Row = Booking & { products: Pick<Product, "name"> | null };
 
 const statusOptions: { value: BookingStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -224,16 +225,24 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
               {pageRows.map((b) => (
                 <tr key={b.id} className="transition hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
-                    {formatDate(b.event_date)}
+                    <Link
+                      href={`/admin/bookings/${b.id}`}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {formatDate(b.event_date)}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {b.products?.name}
+                    {b.products?.name ?? "Custom"}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{b.theme ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <span className="font-medium text-gray-900">
+                    <Link
+                      href={`/admin/bookings/${b.id}`}
+                      className="font-medium text-gray-900 hover:underline underline-offset-2"
+                    >
                       {b.customer_name}
-                    </span>
+                    </Link>
                     <div className="text-xs text-gray-400">{b.phone}</div>
                   </td>
                   <td className="px-4 py-3">
@@ -252,12 +261,20 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
                         </option>
                       ))}
                     </select>
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 flex flex-col items-start gap-1">
                       <BookingStatusBadge status={b.status} />
+                      <ProjectStatusBadge status={b.project_status} />
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
+                      <Link
+                        href={`/admin/bookings/${b.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                      >
+                        <EyeIcon className="h-3.5 w-3.5" />
+                        Detail
+                      </Link>
                       <Link
                         href={`/admin/bookings/${b.id}/edit`}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"

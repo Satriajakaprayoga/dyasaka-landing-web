@@ -11,6 +11,15 @@ the existing schema (`categories`, `products`, `product_images`, `bookings`,
 - A 3-phase checklist workflow (stock check → pickup → return) tied to
   down-payment confirmation
 - Operational "project status" tracking, separate from the sales status
+- External vendors (clown, photographer, etc.) booked per event, separate
+  from owned inventory
+- Rentable property (chairs, tables) handled via the same item structure as
+  decoration stands
+- A manual transportation fee per booking
+- Company profile and bank accounts, shown to customers and on invoices
+- Invoices that customers can open by private link and download as PDF
+- Traffic-source tracking, so each booking records where the customer came from
+- Planning and procurement of goods (suppliers, purchase orders, receiving)
 
 Use this as the source of truth for schema generation. Table names, field names,
 and relationships below should be followed exactly unless noted otherwise.
@@ -50,6 +59,42 @@ not a single physical thing.
 - `price`
 - `is_active`
 - `created_at`, `updated_at`
+
+### `bookings`
+
+A recorded event booking. This is the central table that most new tables
+attach to (`booking_items`, `booking_vendors`, `checklist_items`,
+`stock_movements`). Existing fields:
+
+- `id` (PK)
+- `product_id` (FK → products) — see note below on custom bookings
+- `customer_name`
+- `phone`
+- `event_date`
+- `event_address`
+- `theme`
+- `message`
+- `status` — one of: `pending`, `confirmed`, `done`, `cancelled`. Only
+  `confirmed` bookings consume `date_capacity` and rentable availability.
+- `created_at`, `updated_at`
+
+Fields added by this redesign (defined in their own sections below, listed
+here so the full picture of `bookings` is in one place):
+
+- `project_status` — operational pipeline status (section 4)
+- `dp_received_at` — down payment timestamp, triggers checklist generation
+  (section 4)
+- `transport_fee` — manual transportation fee (section 7)
+- `source` — where the customer came from (section 10)
+- `utm_campaign` — optional campaign tag (section 10)
+
+Note on `product_id`: the feature spec allows the admin to build a "custom
+booking" not based on a predefined product. If that is supported, `product_id`
+must be nullable. Confirm this before generating the migration.
+
+Privacy rule to preserve: this table holds customer name, phone, and event
+address, so anonymous/public clients must never be able to read it. The public
+booking form may only insert (always as `pending`), never select.
 
 ### `product_images`
 
@@ -255,7 +300,300 @@ Fields:
 
 ---
 
-## 5. Key business rules to preserve
+## 5. New tables — vendors (external services)
+
+Vendors are people/businesses coordinated for an event (clown, photographer,
+MC, catering) rather than inventory owned by the business. They have no stock
+concept and no fixed `quantity_owned` — availability is a date-collision
+warning, not a hard capacity number.
+
+### `vendors`
+
+Master record for an external service provider.
+
+- `id` (PK)
+- `name` — e.g. "Badut Kecil Ceria"
+- `vendor_category` — plain string (e.g. "Clown", "Photographer", "Catering"),
+  same reasoning as `items.item_category`: a separate, free-text taxonomy, not
+  tied to the `categories` or `item_category` lists
+- `phone`
+- `address` — nullable
+- `social_media` — nullable, plain string (e.g. "IG: @badutceria"); kept as a
+  single text field rather than a structured table for now
+- `notes` — nullable, free text
+- `created_at`, `updated_at`
+
+### `vendor_services`
+
+Optional predefined offerings for a vendor (a vendor can still be booked
+without one — see `booking_vendors.vendor_service_id` being nullable).
+
+- `id` (PK)
+- `vendor_id` (FK → vendors)
+- `name` — e.g. "2-hour clown performance"
+- `description` — nullable
+- `price` — reference price only; not locked, see `agreed_price` below
+- `created_at`, `updated_at`
+
+### `booking_vendors`
+
+A vendor booked for a specific event. Supports both a predefined service and
+a fully custom/negotiated booking.
+
+- `id` (PK)
+- `booking_id` (FK → bookings)
+- `vendor_id` (FK → vendors)
+- `vendor_service_id` — nullable FK → vendor_services
+- `agreed_price` — snapshot of the actually negotiated price for this
+  booking; independent of `vendor_services.price`, same "freeze the price"
+  pattern as `booking_items.unit_price`
+- `status` — one of: `pending`, `confirmed`, `cancelled`
+- `note` — nullable, e.g. special requests for this event
+- `created_at`, `updated_at`
+
+**Double-booking check (warning only, not enforced):** when adding a vendor to
+a booking, check whether the same `vendor_id` already has another
+`booking_vendors` row with `status = confirmed` on the same `event_date`
+(joining through `bookings`). If so, show a warning to the admin — this does
+not block the action, since the admin may have information the system
+doesn't (e.g. the vendor can actually cover both events). This mirrors the
+non-enforced nature of `date_capacity` and transportation fee entry.
+
+---
+
+## 6. Rentable property (chairs, tables, etc.)
+
+No new tables needed — these are modeled as ordinary `items` with
+`type = rentable`, exactly like stands (e.g. `item_category = "Furniture"`).
+They follow the same availability math, stock movement rules, and checklist
+(pickup/return) behavior as any other rentable item.
+
+The only requirement is on the admin UI side: furniture items should be
+visually separated from decoration items when adding items to a booking (e.g.
+grouped/filterable by `item_category`), rather than mixed into one
+undifferentiated list — this is a UI grouping concern, not a schema change.
+
+Furniture can be added to a booking as an **addition beyond the product's
+original recipe** — `booking_items` already supports rows that aren't part of
+the original `product_items` template, so renting chairs/tables for a
+"Basic Birthday" booking is just additional `booking_items` rows on that
+booking, same mechanism as swapping a balloon color.
+
+---
+
+## 7. Transportation fee
+
+Handled as a manual field on `bookings`, not a zone/lookup table, since
+pricing is sometimes negotiated case-by-case rather than fixed by distance.
+
+### Changes to `bookings`
+
+- `transport_fee` — numeric, nullable; entered manually by the admin per
+  booking, same spirit as `date_capacity` being admin-managed rather than
+  system-calculated
+
+---
+
+## 8. Company profile and bank accounts
+
+There is exactly one company, so the profile is a single-row settings table,
+not a growing list. Logo, social links and bank details are meant to be shown
+to customers, so anonymous read is allowed. Only the admin can write.
+
+### `company_profile`
+
+- `id` (PK) — only one row should ever exist
+- `company_name`
+- `logo_url` — points into Supabase Storage, same approach as product images
+- `address`
+- `phone`
+- `email`
+- `instagram_url`, `facebook_url`, `tiktok_url` — nullable plain text, one
+  field per platform
+- `updated_at`
+
+### `company_bank_accounts`
+
+A separate child table, because the business may have more than one account
+and an invoice must show the right one.
+
+- `id` (PK)
+- `bank_name`
+- `account_holder`
+- `account_number`
+- `is_active` — only active accounts are offered for new invoices
+- `sort_order`
+- `created_at`, `updated_at`
+
+---
+
+## 9. Invoices
+
+An invoice is a record that must not change after it is issued. For that
+reason it stores its own copy of everything it shows, rather than reading
+live from bookings, items, or company settings. This is the same "freeze the
+price" principle as `booking_items.unit_price`.
+
+### `invoices`
+
+- `id` (PK)
+- `booking_id` (FK → bookings)
+- `invoice_number` — unique, human-readable
+- `access_token` — unique, long and unguessable; this is what the customer's
+  link contains, never the booking id or invoice id
+- `status` — one of: `draft`, `issued`, `paid`, `void`
+- `issue_date`
+- `due_date` — nullable
+- `subtotal`
+- `total`
+- `amount_paid` — for example the down payment received
+- `balance_due`
+- `company_name_snapshot` — company name as it was when issued
+- `bank_account_snapshot` — the bank name, holder and number shown on this
+  invoice, copied as text when issued
+- `notes` — nullable
+- `created_at`, `updated_at`
+
+### `invoice_items`
+
+Frozen copy of the invoice lines. Lines can come from booking items, vendors,
+the transport fee, or be typed freely by the admin.
+
+- `id` (PK)
+- `invoice_id` (FK → invoices, cascade delete)
+- `description`
+- `quantity`
+- `unit_price`
+- `line_total`
+- `source_type` — one of: `item`, `vendor`, `transport`, `custom`
+- `sort_order`
+
+### Customer access rules
+
+- Customers have no accounts, and `bookings` must stay unreadable to the
+  public, so the invoice page is reached only through `access_token`.
+- The public must never get a general select permission on `invoices`. The
+  lookup by token should go through a server route or database function that
+  returns the single matching invoice, so one token never exposes any other
+  invoice.
+- The PDF is generated on demand from the stored invoice data. PDF files are
+  not stored.
+- An invoice in `draft` status is never visible through the public link.
+  Voiding an invoice keeps the row and changes its status; nothing is deleted.
+
+**Open decision:** one invoice per booking, or separate down-payment and final
+invoices. If separate, add an `invoice_type` field (`dp` or `final`) and allow
+many invoices per booking. Until decided, design `booking_id` as a plain
+foreign key without a unique constraint, so both options remain possible.
+
+---
+
+## 10. Traffic-source analytics
+
+The website can only learn where a visitor came from at the moment they
+arrive, so the source is captured on first landing, kept in the browser, and
+saved into the booking when the booking is created.
+
+### Changes to `bookings`
+
+- `source` — plain string, nullable. Suggested values: `instagram`,
+  `facebook`, `tiktok`, `whatsapp`, `referral`, `other`. Kept as free text in
+  the same spirit as `item_category`.
+- `utm_campaign` — nullable plain string
+
+Sources of the value:
+
+- Public booking form: taken from the UTM parameters on the link, or from the
+  page referrer when no UTM tag exists. Social in-app browsers often send no
+  referrer, so links shared on Instagram, Facebook and TikTok should carry a
+  UTM tag.
+- Admin booking form: a manual source dropdown, because bookings negotiated
+  only on WhatsApp carry no automatic source.
+
+### `page_visits` (optional, build later)
+
+Only needed to compare visits against bookings per platform.
+
+- `id` (PK)
+- `source`
+- `utm_campaign` — nullable
+- `landing_path`
+- `visited_at`
+
+Anonymous visitors may insert into this table but never read it. It grows over
+time, so it is deferred until conversion tracking is actually wanted.
+
+---
+
+## 11. Planning and procurement
+
+Three separate questions, only the third needs new tables:
+
+1. **Planning:** what is needed? Computed from upcoming `booking_items`.
+2. **Gap:** what is missing? Computed, never stored.
+3. **Procurement:** what was ordered, from whom, and did it arrive? Stored.
+
+### How the gap is computed
+
+- Consumables: demand from upcoming confirmed bookings, minus current
+  `stock_quantity`, with `reorder_point` kept as a safety floor.
+- Rentables: the gap is date-based. It is the highest demand on any single
+  date minus `items.quantity_owned`. Two events needing more chairs than are
+  owned on the same day is a shortage even if total stock looks fine.
+
+### `suppliers`
+
+Shops or people goods are bought from. Kept separate from `vendors`, which
+are service providers booked for an event.
+
+- `id` (PK)
+- `name`
+- `phone`
+- `address` — nullable
+- `notes` — nullable
+- `created_at`, `updated_at`
+
+### `purchase_orders`
+
+- `id` (PK)
+- `supplier_id` (FK → suppliers)
+- `booking_id` — nullable FK → bookings; set only when the order exists for a
+  specific event
+- `status` — one of: `draft`, `ordered`, `partially_received`, `received`,
+  `cancelled`
+- `order_date` — nullable
+- `expected_date` — nullable
+- `note` — nullable
+- `created_at`, `updated_at`
+
+### `purchase_order_items`
+
+- `id` (PK)
+- `purchase_order_id` (FK → purchase_orders, cascade delete)
+- `item_variant_id` (FK → item_variants)
+- `quantity_ordered`
+- `quantity_received` — starts at zero; supports deliveries that arrive in
+  parts
+- `unit_cost` — what was actually paid
+
+### Receiving goods
+
+- Receiving a line writes a row to `stock_movements`: type `restock` for
+  consumable items, `purchased` for rentable items. Stock is never edited
+  directly, so purchases and stock cannot drift apart.
+- When the order is linked to a booking, receiving the goods also moves the
+  matching `stock_check` checklist row from `need_order` to `in_stock`.
+- `unit_cost` is the first cost data in the system. It is stored on purchase
+  order lines only; it does not change `item_variants.current_price`, which
+  stays the customer-facing selling price.
+
+**Open decision:** buy per booking (an order exists because one event needs
+it) or restock in bulk from reorder points. The schema supports both because
+`purchase_orders.booking_id` is nullable.
+
+---
+
+## 12. Key business rules to preserve
 
 - A booking's sale status and its operational/project status are tracked
   independently — do not merge them into one field.
@@ -278,3 +616,22 @@ Fields:
 - The existing `date_capacity` table and its trigger-based recalculation stay
   unchanged — it remains a separate, business-wide daily capacity check that
   sits alongside (not replacing) per-item rentable availability.
+- Vendor double-booking is a warning shown to the admin, never a hard block —
+  the admin always has final say.
+- `vendor_category` and `item_category` are both plain strings, intentionally
+  independent of each other and of `products.category_id`. Do not merge these
+  into a shared `categories` table.
+- `transport_fee` is always admin-entered per booking; do not build automatic
+  distance/zone-based calculation for this phase.
+- Invoices are frozen records: line items, totals, company name and bank
+  account are copied into the invoice when it is issued. Later changes to
+  prices, items or company settings never alter an issued invoice.
+- Invoice access for customers is by `access_token` only, and public clients
+  never get a general select permission on `invoices` or `bookings`.
+- `company_profile` holds one row only.
+- `source` on bookings is recorded at booking creation and is never inferred
+  later; bookings made before the field existed stay empty.
+- Procurement never edits stock directly. Receiving goods always goes through
+  `stock_movements`.
+- Suppliers (goods you buy) and vendors (services you book for an event) are
+  separate tables and separate admin screens.

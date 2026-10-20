@@ -38,7 +38,8 @@ export type ProjectStatus =
 
 export type Booking = {
   id: string;
-  product_id: string;
+  // Null = custom booking assembled per-item by the admin.
+  product_id: string | null;
   customer_name: string;
   phone: string;
   event_date: string;
@@ -48,6 +49,7 @@ export type Booking = {
   status: BookingStatus;
   project_status: ProjectStatus;
   dp_received_at: string | null;
+  transport_fee: number | null;
 };
 
 // ---------- Item master data ----------
