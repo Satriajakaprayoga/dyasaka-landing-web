@@ -33,20 +33,25 @@ export default function BookingDetailActions({
     setBusy(true);
     setError(null);
 
-    const res = await fetch("/api/admin/bookings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: bookingId, ...payload }),
-    });
-    setBusy(false);
+    try {
+      const res = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bookingId, ...payload }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Gagal menyimpan");
-      return;
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Gagal menyimpan");
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      setError("Gagal terhubung ke server. Coba lagi.");
+    } finally {
+      setBusy(false);
     }
-
-    router.refresh();
   }
 
   function markDpReceived() {
@@ -57,7 +62,7 @@ export default function BookingDetailActions({
     )
       return;
 
-    patch({ dp_received_at: new Date().toISOString() });
+    void patch({ dp_received_at: new Date().toISOString() });
   }
 
   return (
@@ -87,9 +92,7 @@ export default function BookingDetailActions({
       </label>
 
       {dpReceivedAt ? (
-        <span className={btnSecondary + " cursor-default"}>
-          DP Diterima
-        </span>
+        <span className={btnSecondary + " cursor-default"}>DP Diterima</span>
       ) : (
         <button
           type="button"

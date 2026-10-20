@@ -37,6 +37,7 @@ Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number i
 
 - Inline status `<select>` per row → `PATCH /api/admin/bookings` `{ id, status }` → refresh. Status badge + **project status badge** under the select mirror the change.
 - Date and customer-name cells link to `/admin/bookings/[id]` (the operational detail page).
+- **Detail** → `/admin/bookings/[id]` (explicit action button, first in the actions column).
 - **Ubah** → `/admin/bookings/[id]/edit`.
 - **Hapus** → `confirm()` → `DELETE /api/admin/bookings?id=` → refresh. The DB trigger recalculates `date_capacity.booked_count` on delete.
 

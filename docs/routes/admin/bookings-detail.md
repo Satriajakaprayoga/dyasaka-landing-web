@@ -51,4 +51,4 @@ Telepon, tanggal acara, produk (or "— Custom / tanpa paket —"), biaya transp
 ## Navigation
 
 - Breadcrumbs: `Dashboard / Booking / {customer name}` + **Kembali** → `/admin/bookings`.
-- Reached from the bookings list (date/customer link) and after creating a booking in `/admin/bookings/new`.
+- Reached from the bookings list (date/customer link or the **Detail** action button) and after creating a booking in `/admin/bookings/new`.

@@ -14,7 +14,7 @@ import {
 } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
 import Pagination from "./Pagination";
-import { PencilIcon, TrashIcon } from "./icons";
+import { EyeIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Booking & { products: Pick<Product, "name"> | null };
 
@@ -268,6 +268,13 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
+                      <Link
+                        href={`/admin/bookings/${b.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                      >
+                        <EyeIcon className="h-3.5 w-3.5" />
+                        Detail
+                      </Link>
                       <Link
                         href={`/admin/bookings/${b.id}/edit`}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
