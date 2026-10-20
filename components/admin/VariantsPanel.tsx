@@ -8,6 +8,7 @@ import type {
   StockMovement,
   StockMovementType,
 } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 import {
   Badge,
   Card,
@@ -18,7 +19,20 @@ import {
   inputClass,
   labelClass,
 } from "./ui";
+import ConfirmModal, {
+  ImpactBookingList,
+  ImpactProductList,
+  type ImpactBookingRef,
+  type ImpactProductRef,
+} from "./ConfirmModal";
 import { PencilIcon, PlusIcon, TrashIcon } from "./icons";
+
+type Impact = {
+  blocked: boolean;
+  lines: { text: string; danger: boolean }[];
+  bookingRefs: ImpactBookingRef[];
+  productRefs: ImpactProductRef[];
+};
 
 const movementTypeLabels: Record<StockMovementType, string> = {
   restock: "Restock",
@@ -300,6 +314,8 @@ export default function VariantsPanel({
   const [movingId, setMovingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmVariant, setConfirmVariant] = useState<ItemVariant | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
 
   async function handleCreate(payload: Record<string, unknown>) {
     setBusy(true);
@@ -343,19 +359,109 @@ export default function VariantsPanel({
     router.refresh();
   }
 
-  async function handleDelete(v: ItemVariant) {
-    if (!confirm(`Hapus varian "${variantTitle(v)}"?`)) return;
+  // A variant is RESTRICT-referenced by four tables; any of them blocks.
+  // Referencing bookings/products are fetched as details so the modal can
+  // link to them for inspection before the admin resolves the blockers.
+  async function computeImpact(v: ItemVariant): Promise<Impact> {
+    const [priceHistory, movements, recipeRows, bookingItemRows] =
+      await Promise.all([
+        supabase
+          .from("item_price_history")
+          .select("id", { count: "exact", head: true })
+          .eq("item_variant_id", v.id),
+        supabase
+          .from("stock_movements")
+          .select("id", { count: "exact", head: true })
+          .eq("item_variant_id", v.id),
+        supabase
+          .from("product_items")
+          .select("product_id, products(id, name)")
+          .eq("item_variant_id", v.id),
+        supabase
+          .from("booking_items")
+          .select("booking_id, bookings(customer_name, event_date)")
+          .eq("item_variant_id", v.id),
+      ]);
+
+    // Child→parent embeds come back as objects; dedupe by parent id.
+    const productMap = new Map<string, string>();
+    for (const row of (recipeRows.data ?? []) as unknown as {
+      products: { id: string; name: string } | null;
+    }[]) {
+      if (row.products) productMap.set(row.products.id, row.products.name);
+    }
+    const productRefs: ImpactProductRef[] = [...productMap.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const bookingMap = new Map<string, { customer_name: string; event_date: string }>();
+    for (const row of (bookingItemRows.data ?? []) as unknown as {
+      booking_id: string;
+      bookings: { customer_name: string; event_date: string } | null;
+    }[]) {
+      if (row.bookings) bookingMap.set(row.booking_id, row.bookings);
+    }
+    const bookingRefs: ImpactBookingRef[] = [...bookingMap.entries()]
+      .map(([id, b]) => ({ id, ...b }))
+      .sort((a, b) => a.event_date.localeCompare(b.event_date));
+
+    const blockers: string[] = [];
+    if ((movements.count ?? 0) > 0)
+      blockers.push(`${movements.count} pergerakan stok`);
+    if ((priceHistory.count ?? 0) > 0)
+      blockers.push(`${priceHistory.count} riwayat harga`);
+    if ((recipeRows.data ?? []).length > 0)
+      blockers.push(`${(recipeRows.data ?? []).length} baris resep produk`);
+    if ((bookingItemRows.data ?? []).length > 0)
+      blockers.push(`${(bookingItemRows.data ?? []).length} item booking`);
+
+    if (blockers.length === 0) {
+      return {
+        blocked: false,
+        lines: [{ text: "Tidak ada data terkait — aman untuk dihapus.", danger: false }],
+        bookingRefs: [],
+        productRefs: [],
+      };
+    }
+
+    return {
+      blocked: true,
+      lines: [
+        {
+          text: `Varian masih dipakai (${blockers.join(", ")}) — hapus data terkait terlebih dahulu.`,
+          danger: true,
+        },
+      ],
+      bookingRefs,
+      productRefs,
+    };
+  }
+
+  function closeConfirm() {
+    setConfirmVariant(null);
+    setImpact(null);
+  }
+
+  async function handleDeleteClick(v: ItemVariant) {
+    setConfirmVariant(v);
+    setImpact(null);
+    setImpact(await computeImpact(v));
+  }
+
+  async function performDelete() {
+    if (!confirmVariant) return;
 
     setBusy(true);
     setError(null);
 
-    const res = await fetch(`/api/admin/item-variants?id=${v.id}`, {
+    const res = await fetch(`/api/admin/item-variants?id=${confirmVariant.id}`, {
       method: "DELETE",
     });
-    setBusy(false);
 
     if (!res.ok) {
       const body = await res.json();
+      closeConfirm();
+      setBusy(false);
       setError(
         body.error ??
           "Gagal menghapus varian (masih dipakai di riwayat, resep, atau booking)",
@@ -363,6 +469,8 @@ export default function VariantsPanel({
       return;
     }
 
+    closeConfirm();
+    setBusy(false);
     router.refresh();
   }
 
@@ -518,7 +626,7 @@ export default function VariantsPanel({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(v)}
+                            onClick={() => handleDeleteClick(v)}
                             disabled={busy}
                             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                           >
@@ -603,6 +711,51 @@ export default function VariantsPanel({
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmVariant !== null}
+        title={confirmVariant ? `Hapus varian "${variantTitle(confirmVariant)}"?` : ""}
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={busy}
+        disabled={impact?.blocked ?? false}
+        onConfirm={performDelete}
+        onClose={closeConfirm}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          <>
+            {impact.lines.map((line, i) => (
+              <p
+                key={i}
+                className={
+                  line.danger
+                    ? "font-medium text-red-600"
+                    : "text-gray-600"
+                }
+              >
+                {line.text}
+              </p>
+            ))}
+            {impact.bookingRefs.length > 0 && (
+              <>
+                <p className="pt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Dipakai di booking — klik untuk memeriksa
+                </p>
+                <ImpactBookingList bookings={impact.bookingRefs} />
+              </>
+            )}
+            {impact.productRefs.length > 0 && (
+              <>
+                <p className="pt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Dipakai di resep produk — klik untuk memeriksa
+                </p>
+                <ImpactProductList products={impact.productRefs} />
+              </>
+            )}
+          </>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

@@ -23,7 +23,7 @@ Client-side, 8 categories per page (`components/admin/Pagination.tsx`) under the
 
 - Create form on top → `POST /api/admin/categories` (server slugifies the name).
 - **Ubah** → inline rename row (auto-focus input, Simpan/Batal) → `PATCH /api/admin/categories` `{ id, name }` (slug regenerated).
-- **Hapus** → `confirm()` → `DELETE /api/admin/categories?id=`; blocked (RESTRICT) while products reference the category.
+- **Hapus** → `ConfirmModal` with impact check: counts `products` and `items` (both RESTRICT blockers — confirm disabled with counts shown) → confirm → `DELETE /api/admin/categories?id=` → reload list. The API returns a friendly 409 for FK races.
 
 ## Navigation
 

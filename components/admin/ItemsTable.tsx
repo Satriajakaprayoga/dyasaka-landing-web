@@ -4,13 +4,27 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Item, ItemType, ItemVariant } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 import { Badge, Card, EmptyState, inputClass } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
 import Pagination from "./Pagination";
+import ConfirmModal, {
+  ImpactBookingList,
+  ImpactProductList,
+  type ImpactBookingRef,
+  type ImpactProductRef,
+} from "./ConfirmModal";
 import { LayersIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Item & {
   item_variants: ItemVariant[];
+};
+
+type Impact = {
+  blocked: boolean;
+  lines: { text: string; danger: boolean }[];
+  bookingRefs: ImpactBookingRef[];
+  productRefs: ImpactProductRef[];
 };
 
 export function lowStockCount(variants: ItemVariant[]) {
@@ -23,6 +37,8 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRow, setConfirmRow] = useState<Row | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
   const [filters, setFilter, resetFilters] = usePersistentFilters<{
     q: string;
     type: string;
@@ -65,28 +81,121 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function handleDelete(item: Row) {
-    if (
-      !confirm(
-        `Hapus item "${item.name}"? Semua variannya juga akan dihapus (gagal jika masih dipakai resep produk atau booking).`,
-      )
-    )
-      return;
+  // items → item_variants is ON DELETE CASCADE, but each variant is
+  // RESTRICT-referenced by four tables: price history, stock movements,
+  // product recipes, and booking items — any of them blocks the delete.
+  // Referencing bookings/products are fetched so the modal can link to
+  // them for inspection before the admin decides.
+  async function computeImpact(item: Row): Promise<Impact> {
+    const variantIds = item.item_variants.map((v) => v.id);
+    const lines: Impact["lines"] = [];
 
-    setDeletingId(item.id);
+    if (variantIds.length === 0) {
+      return {
+        blocked: false,
+        lines: [{ text: "Item tanpa varian — aman untuk dihapus.", danger: false }],
+        bookingRefs: [],
+        productRefs: [],
+      };
+    }
+
+    const [priceHistory, movements, recipeRows, bookingItemRows] =
+      await Promise.all([
+        supabase
+          .from("item_price_history")
+          .select("id", { count: "exact", head: true })
+          .in("item_variant_id", variantIds),
+        supabase
+          .from("stock_movements")
+          .select("id", { count: "exact", head: true })
+          .in("item_variant_id", variantIds),
+        supabase
+          .from("product_items")
+          .select("product_id, products(id, name)")
+          .in("item_variant_id", variantIds),
+        supabase
+          .from("booking_items")
+          .select("booking_id, bookings(customer_name, event_date)")
+          .in("item_variant_id", variantIds),
+      ]);
+
+    // Child→parent embeds come back as objects; dedupe by parent id.
+    const productMap = new Map<string, string>();
+    for (const row of (recipeRows.data ?? []) as unknown as {
+      products: { id: string; name: string } | null;
+    }[]) {
+      if (row.products) productMap.set(row.products.id, row.products.name);
+    }
+    const productRefs: ImpactProductRef[] = [...productMap.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const bookingMap = new Map<string, { customer_name: string; event_date: string }>();
+    for (const row of (bookingItemRows.data ?? []) as unknown as {
+      booking_id: string;
+      bookings: { customer_name: string; event_date: string } | null;
+    }[]) {
+      if (row.bookings) bookingMap.set(row.booking_id, row.bookings);
+    }
+    const bookingRefs: ImpactBookingRef[] = [...bookingMap.entries()]
+      .map(([id, b]) => ({ id, ...b }))
+      .sort((a, b) => a.event_date.localeCompare(b.event_date));
+
+    const blockers: string[] = [];
+    if ((movements.count ?? 0) > 0)
+      blockers.push(`${movements.count} pergerakan stok`);
+    if ((priceHistory.count ?? 0) > 0)
+      blockers.push(`${priceHistory.count} riwayat harga`);
+    if (productRefs.length > 0)
+      blockers.push(`${(recipeRows.data ?? []).length} baris resep produk`);
+    if ((bookingItemRows.data ?? []).length > 0)
+      blockers.push(`${(bookingItemRows.data ?? []).length} item booking`);
+
+    const blocked = blockers.length > 0;
+    if (blocked) {
+      lines.push({
+        text: `Varian masih dipakai (${blockers.join(", ")}) — item tidak dapat dihapus.`,
+        danger: true,
+      });
+    }
+    lines.push({
+      text: `${variantIds.length} varian (beserta stoknya) akan ikut terhapus.`,
+      danger: false,
+    });
+    return { blocked, lines, bookingRefs, productRefs };
+  }
+
+  function closeConfirm() {
+    setConfirmRow(null);
+    setImpact(null);
+  }
+
+  async function handleDeleteClick(item: Row) {
+    setConfirmRow(item);
+    setImpact(null);
+    setImpact(await computeImpact(item));
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
+
+    setDeletingId(confirmRow.id);
     setError(null);
 
-    const res = await fetch(`/api/admin/items?id=${item.id}`, {
+    const res = await fetch(`/api/admin/items?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setDeletingId(null);
 
     if (!res.ok) {
       const body = await res.json();
+      closeConfirm();
+      setDeletingId(null);
       setError(body.error ?? "Gagal menghapus item");
       return;
     }
 
+    closeConfirm();
+    setDeletingId(null);
     router.refresh();
   }
 
@@ -231,7 +340,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
                         </Link>
                         <button
                           type="button"
-                          onClick={() => handleDelete(item)}
+                          onClick={() => handleDeleteClick(item)}
                           disabled={deletingId === item.id}
                           className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                         >
@@ -255,6 +364,51 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
         pageSize={PAGE_SIZE}
         onPageChange={changePage}
       />
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={confirmRow ? `Hapus item "${confirmRow.name}"?` : ""}
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={deletingId !== null}
+        disabled={impact?.blocked ?? false}
+        onConfirm={performDelete}
+        onClose={closeConfirm}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          <>
+            {impact.lines.map((line, i) => (
+              <p
+                key={i}
+                className={
+                  line.danger
+                    ? "font-medium text-red-600"
+                    : "text-gray-600"
+                }
+              >
+                {line.text}
+              </p>
+            ))}
+            {impact.bookingRefs.length > 0 && (
+              <>
+                <p className="pt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Dipakai di booking — klik untuk memeriksa
+                </p>
+                <ImpactBookingList bookings={impact.bookingRefs} />
+              </>
+            )}
+            {impact.productRefs.length > 0 && (
+              <>
+                <p className="pt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Dipakai di resep produk — klik untuk memeriksa
+                </p>
+                <ImpactProductList products={impact.productRefs} />
+              </>
+            )}
+          </>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

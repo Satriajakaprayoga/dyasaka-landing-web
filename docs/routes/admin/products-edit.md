@@ -25,7 +25,7 @@ Edit product master data, manage its photos, and maintain the package recipe ("I
 
 ## Recipe ("Isi Paket", `RecipePanel`)
 
-- Lists the recipe rows: item/variant label, reference price (`formatRupiah(current_price)`, Sewa/Habis Pakai), inline quantity editor (PATCHes on blur when changed), delete with confirm.
+- Lists the recipe rows: item/variant label, reference price (`formatRupiah(current_price)`, Sewa/Habis Pakai), inline quantity editor (PATCHes on blur when changed), delete via `ConfirmModal` (plain confirm — recipe rows have no children; existing bookings are unaffected).
 - **Tambah Item** — variant `<select>` grouped by `item_category` via optgroup (label includes price) + qty → `POST /api/admin/product-items`, which **upserts** on `(product_id, item_variant_id)` (same variant twice = quantity update).
 - Empty state: "Belum ada item dalam paket." The recipe drives both the public "Paket Termasuk" list and the auto-seeding of new bookings' `booking_items`.
 - Page layout is widened to `max-w-3xl` to fit the panel.

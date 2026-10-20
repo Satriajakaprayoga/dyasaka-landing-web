@@ -4,14 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Category, Product, ProductImage } from "@/lib/types";
-import { Badge, Card, EmptyState, inputClass } from "./ui";
+import { supabase } from "@/lib/supabase";
+import { Badge, Card, EmptyState, formatDate, inputClass } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
 import Pagination from "./Pagination";
+import ConfirmModal, {
+  ImpactBookingList,
+  type ImpactBookingRef,
+} from "./ConfirmModal";
 import { PackageIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Product & {
   categories: Pick<Category, "name">;
   product_images: Pick<ProductImage, "image_url" | "sort_order">[];
+};
+
+type Impact = {
+  blocked: boolean;
+  lines: { text: string; danger: boolean }[];
+  bookings: ImpactBookingRef[];
 };
 
 const statusFilterOptions = [
@@ -24,6 +35,8 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRow, setConfirmRow] = useState<Row | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
   const [filters, setFilter, resetFilters] = usePersistentFilters<{
     q: string;
     cat: string;
@@ -68,28 +81,102 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function handleDelete(p: Row) {
-    if (
-      !confirm(
-        `Hapus produk "${p.name}"? Semua foto produk juga akan dihapus.`,
-      )
-    )
-      return;
+  function closeConfirm() {
+    setConfirmRow(null);
+    setImpact(null);
+  }
 
-    setDeletingId(p.id);
+  // bookings.product_id keeps its RESTRICT FK, but the BEFORE DELETE
+  // trigger (20261020140000) cancels active bookings and unlinks the
+  // rest before the constraint is checked — so deletion proceeds and
+  // the modal lists the affected bookings as links to inspect first.
+  // Photos + recipe rows cascade (storage files removed by the API).
+  async function computeImpact(p: Row): Promise<Impact> {
+    const [bookingsRes, images, recipe] = await Promise.all([
+      supabase
+        .from("bookings")
+        .select("id, customer_name, event_date, status")
+        .eq("product_id", p.id)
+        .order("event_date"),
+      supabase
+        .from("product_images")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", p.id),
+      supabase
+        .from("product_items")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", p.id),
+    ]);
+
+    const bookings = (bookingsRes.data ?? []) as unknown as ImpactBookingRef[];
+    const activeFirst = [...bookings].sort((a, b) => {
+      const aActive = a.status === "pending" || a.status === "confirmed" ? 0 : 1;
+      const bActive = b.status === "pending" || b.status === "confirmed" ? 0 : 1;
+      return aActive - bActive;
+    });
+
+    const activeCount = bookings.filter(
+      (b) => b.status === "pending" || b.status === "confirmed",
+    ).length;
+    const finishedCount = bookings.length - activeCount;
+
+    const lines: Impact["lines"] = [];
+    if (activeCount > 0) {
+      lines.push({
+        text: `${activeCount} booking aktif (pending/confirmed) akan dibatalkan.`,
+        danger: true,
+      });
+    }
+    if (finishedCount > 0) {
+      lines.push({
+        text: `${finishedCount} booking selesai/batal tetap tersimpan, hanya lepas dari produk ini.`,
+        danger: false,
+      });
+    }
+    if ((images.count ?? 0) > 0) {
+      lines.push({
+        text: `${images.count} foto produk (beserta filenya di storage) akan ikut terhapus.`,
+        danger: false,
+      });
+    }
+    if ((recipe.count ?? 0) > 0) {
+      lines.push({
+        text: `${recipe.count} baris Isi Paket (resep) akan ikut terhapus.`,
+        danger: false,
+      });
+    }
+    if (lines.length === 0) {
+      lines.push({ text: "Tidak ada data terkait — aman untuk dihapus.", danger: false });
+    }
+    return { blocked: false, lines, bookings: activeFirst };
+  }
+
+  async function handleDeleteClick(p: Row) {
+    setConfirmRow(p);
+    setImpact(null);
+    setImpact(await computeImpact(p));
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
+
+    setDeletingId(confirmRow.id);
     setError(null);
 
-    const res = await fetch(`/api/admin/products?id=${p.id}`, {
+    const res = await fetch(`/api/admin/products?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setDeletingId(null);
 
     if (!res.ok) {
       const body = await res.json();
+      closeConfirm();
+      setDeletingId(null);
       setError(body.error ?? "Gagal menghapus produk");
       return;
     }
 
+    closeConfirm();
+    setDeletingId(null);
     router.refresh();
   }
 
@@ -243,7 +330,7 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
                         </Link>
                         <button
                           type="button"
-                          onClick={() => handleDelete(p)}
+                          onClick={() => handleDeleteClick(p)}
                           disabled={deletingId === p.id}
                           className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                         >
@@ -267,6 +354,43 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
         pageSize={PAGE_SIZE}
         onPageChange={changePage}
       />
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={confirmRow ? `Hapus produk "${confirmRow.name}"?` : ""}
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={deletingId !== null}
+        disabled={impact?.blocked ?? false}
+        onConfirm={performDelete}
+        onClose={closeConfirm}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          <>
+            {impact.lines.map((line, i) => (
+              <p
+                key={i}
+                className={
+                  line.danger
+                    ? "font-medium text-red-600"
+                    : "text-gray-600"
+                }
+              >
+                {line.text}
+              </p>
+            ))}
+            {impact.bookings.length > 0 && (
+              <>
+                <p className="pt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Booking terkait — klik untuk memeriksa
+                </p>
+                <ImpactBookingList bookings={impact.bookings} />
+              </>
+            )}
+          </>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

@@ -161,8 +161,18 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from("item_variants").delete().eq("id", id);
 
   if (error) {
-    // Blocked by RESTRICT when price history, stock movements,
-    // product_items, or booking_items reference the variant.
+    // 23503 = foreign key violation: blocked by RESTRICT when price
+    // history, stock movements, product_items, or booking_items
+    // reference the variant.
+    if (error.code === "23503") {
+      return NextResponse.json(
+        {
+          error:
+            "Varian tidak dapat dihapus karena masih dipakai (riwayat stok/harga, resep produk, atau booking).",
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

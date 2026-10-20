@@ -12,7 +12,11 @@ import {
   formatRupiah,
   inputClass,
 } from "./ui";
+import { supabase } from "@/lib/supabase";
+import ConfirmModal from "./ConfirmModal";
 import { PlusIcon, TrashIcon } from "./icons";
+
+type Impact = { blocked: boolean; lines: { text: string; danger: boolean }[] };
 
 export type BookingItemVariant = {
   color: string | null;
@@ -207,6 +211,8 @@ export default function BookingItemsPanel({
   const [drafts, setDrafts] = useState<
     Record<string, { quantity?: string; unit_price?: string }>
   >({});
+  const [confirmRow, setConfirmRow] = useState<BookingItemRow | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
 
   const catalogById = new Map(
     catalog.flatMap((item) =>
@@ -288,33 +294,51 @@ export default function BookingItemsPanel({
     router.refresh();
   }
 
-  async function handleDelete(row: BookingItemRow) {
-    const name = variantTitle(
-      row.item_variants?.items?.name,
-      row.item_variants?.color,
-      row.item_variants?.size,
-    );
-    if (
-      !confirm(
-        `Hapus "${name}" dari booking ini? Baris checklist terkait juga akan terhapus.`,
-      )
-    )
-      return;
+  // checklist_items.booking_item_id cascades on booking_items delete.
+  async function computeImpact(row: BookingItemRow): Promise<Impact> {
+    const { count } = await supabase
+      .from("checklist_items")
+      .select("id", { count: "exact", head: true })
+      .eq("booking_item_id", row.id);
+
+    const n = count ?? 0;
+    return {
+      blocked: false,
+      lines:
+        n > 0
+          ? [{ text: `${n} baris checklist terkait akan ikut terhapus.`, danger: false }]
+          : [{ text: "Tidak ada baris checklist terkait.", danger: false }],
+    };
+  }
+
+  async function handleDeleteClick(row: BookingItemRow) {
+    setConfirmRow(row);
+    setImpact(null);
+    setImpact(await computeImpact(row));
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
 
     setBusy(true);
     setRowError(null);
 
-    const res = await fetch(`/api/admin/booking-items?id=${row.id}`, {
+    const res = await fetch(`/api/admin/booking-items?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setBusy(false);
 
     if (!res.ok) {
       const body = await res.json();
+      setConfirmRow(null);
+      setImpact(null);
+      setBusy(false);
       setRowError(body.error ?? "Gagal menghapus item");
       return;
     }
 
+    setConfirmRow(null);
+    setImpact(null);
+    setBusy(false);
     router.refresh();
   }
 
@@ -402,7 +426,7 @@ export default function BookingItemsPanel({
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleDelete(row)}
+                        onClick={() => handleDeleteClick(row)}
                         disabled={busy}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                       >
@@ -454,6 +478,41 @@ export default function BookingItemsPanel({
           </Card>
         )
       )}
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={
+          confirmRow
+            ? `Hapus "${variantTitle(
+                confirmRow.item_variants?.items?.name,
+                confirmRow.item_variants?.color,
+                confirmRow.item_variants?.size,
+              )}" dari booking ini?`
+            : ""
+        }
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={busy}
+        onConfirm={performDelete}
+        onClose={() => {
+          setConfirmRow(null);
+          setImpact(null);
+        }}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          impact.lines.map((line, i) => (
+            <p
+              key={i}
+              className={
+                line.danger ? "font-medium text-red-600" : "text-gray-600"
+              }
+            >
+              {line.text}
+            </p>
+          ))
+        )}
+      </ConfirmModal>
     </div>
   );
 }

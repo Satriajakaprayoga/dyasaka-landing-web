@@ -36,7 +36,7 @@ Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number i
 
 - Item name / **Varian** button → `/admin/items/[id]` (variant & stock management).
 - **Ubah** → `/admin/items/[id]/edit`.
-- **Hapus** → `confirm()` → `DELETE /api/admin/items?id=` → refresh; blocked (500) when variants are still referenced by stock/price history, recipes, or bookings.
+- **Hapus** → `ConfirmModal` with impact check: variant ids come from the loaded rows, then counts `item_price_history` / `stock_movements` / `product_items` / `booking_items` (any hit = RESTRICT blocker, confirm disabled) + cascade info (N variants deleted). Blocked bookings/products are listed as clickable inspection links (`ImpactBookingList` → booking detail, `ImpactProductList` → recipe editor) → confirm → `DELETE /api/admin/items?id=` → refresh. The API returns a friendly 409 for FK races.
 
 ## Navigation
 

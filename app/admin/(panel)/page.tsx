@@ -253,6 +253,7 @@ async function PrepNeeded({ today }: { today: string }) {
     .from("bookings")
     .select("id, customer_name, event_date, checklist_items(phase, status)")
     .gte("event_date", today)
+    .neq("status", "cancelled")
     .not("dp_received_at", "is", null)
     .order("event_date")
     .returns<{
@@ -452,7 +453,8 @@ async function NeedOrder() {
     .from("checklist_items")
     .select("id, label, bookings!inner(id, customer_name, event_date, dp_received_at)")
     .eq("phase", "stock_check")
-    .eq("status", "need_order");
+    .eq("status", "need_order")
+    .neq("bookings.status", "cancelled");
 
   const rows = (data ?? []) as unknown as {
     id: string;

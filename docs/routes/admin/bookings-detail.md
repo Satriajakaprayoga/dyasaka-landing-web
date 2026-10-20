@@ -38,7 +38,7 @@ Telepon, tanggal acara, produk (or "— Custom / tanpa paket —"), biaya transp
 - **Tambah Item** — optgroup variant picker (grouped by `item_category`), qty, price prefilled from `current_price` → `POST /api/admin/booking-items`. Rows added after DP got matching catch-up checklist rows.
 - Rows: item/variant label, inline qty + unit price edits (`PATCH` on blur), subtotal, `RentalStatusBadge` + keluar/kembali timestamps for rentables.
 - **Amber non-blocking warning** when a rentable's qty exceeds `quantity_owned − same-date confirmed demand`.
-- **Hapus** — `confirm()` (mentions checklist rows) → `DELETE ?id=`; checklist rows cascade via FK.
+- **Hapus** — `ConfirmModal` with impact check (counts the booking item's `checklist_items` cascade) → `DELETE ?id=`; checklist rows cascade via FK.
 
 ## Checklist panel (`ChecklistPanel`)
 
@@ -46,6 +46,7 @@ Telepon, tanggal acara, produk (or "— Custom / tanpa paket —"), biaya transp
 - Row: label (strikethrough when done), status `<select>` (stock_check: Menunggu/Stok Ada/Perlu Pesan/Selesai; pickup+return: Menunggu/Selesai) → `PATCH`; saving "Selesai" stamps `completed_at` and the DB trigger syncs `rental_status` (pickup → `checked_out`, return → `returned`). Un-marking does not rewind rental status.
 - Inline note (saved on blur), `completed_at` timestamp, return rows show the synced `RentalStatusBadge`.
 - **Baris bebas** — free-text row per phase → `POST` (`booking_item_id` null, sorted last; no rental side effects).
+- Row delete (X) — `ConfirmModal` plain confirm (checklist rows have no children) → `DELETE ?id=`.
 - No checklist + no DP → hint card: "Checklist dibuat otomatis saat DP ditandai diterima."
 
 ## Navigation

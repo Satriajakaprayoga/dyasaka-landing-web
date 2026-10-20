@@ -97,7 +97,15 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('products').delete().eq('id', id);
 
   if (error) {
-    // e.g. product still referenced by bookings (ON DELETE RESTRICT)
+    // 23503 = foreign key violation: product still referenced by
+    // bookings (ON DELETE RESTRICT). The UI pre-checks this, so this
+    // only fires on a race.
+    if (error.code === '23503') {
+      return NextResponse.json(
+        { error: 'Produk tidak dapat dihapus karena masih dipakai booking.' },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -39,7 +39,7 @@ Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number i
 - Date and customer-name cells link to `/admin/bookings/[id]` (the operational detail page).
 - **Detail** → `/admin/bookings/[id]` (explicit action button, first in the actions column).
 - **Ubah** → `/admin/bookings/[id]/edit`.
-- **Hapus** → `confirm()` → `DELETE /api/admin/bookings?id=` → refresh. The DB trigger recalculates `date_capacity.booked_count` on delete.
+- **Hapus** → `ConfirmModal` with cascade info: counts `booking_items` + `checklist_items` (both cascade), plus a note when the booking is `confirmed` (capacity recalculated) and a **"Lihat detail booking"** link into `/admin/bookings/[id]` for a final check before confirming → confirm → `DELETE /api/admin/bookings?id=` → refresh.
 
 ## Navigation
 

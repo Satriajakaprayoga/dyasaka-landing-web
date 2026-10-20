@@ -12,6 +12,7 @@ import {
   inputClass,
 } from "./ui";
 import { PlusIcon, XIcon } from "./icons";
+import ConfirmModal from "./ConfirmModal";
 import type { BookingItemRow } from "./BookingItemsPanel";
 
 type StatusOption = { value: ChecklistStatus; label: string };
@@ -82,6 +83,7 @@ function PhaseSection({
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [confirmRow, setConfirmRow] = useState<ChecklistItem | null>(null);
 
   const statusOptions =
     phase === "stock_check" ? stockStatusOptions : simpleStatusOptions;
@@ -163,23 +165,31 @@ function PhaseSection({
     router.refresh();
   }
 
-  async function handleDeleteRow(row: ChecklistItem) {
-    if (!confirm(`Hapus baris "${row.label}"?`)) return;
+  // checklist_items has no children — plain confirm, no impact query.
+  function handleDeleteRow(row: ChecklistItem) {
+    setConfirmRow(row);
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
 
     setBusy(true);
     onError(null);
 
-    const res = await fetch(`/api/admin/checklist-items?id=${row.id}`, {
+    const res = await fetch(`/api/admin/checklist-items?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setBusy(false);
 
     if (!res.ok) {
       const body = await res.json();
+      setConfirmRow(null);
+      setBusy(false);
       onError(body.error ?? "Gagal menghapus baris");
       return;
     }
 
+    setConfirmRow(null);
+    setBusy(false);
     router.refresh();
   }
 
@@ -324,6 +334,15 @@ function PhaseSection({
           })}
         </ul>
       )}
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={confirmRow ? `Hapus baris "${confirmRow.label}"?` : ""}
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={busy}
+        onConfirm={performDelete}
+        onClose={() => setConfirmRow(null)}
+      />
     </Card>
   );
 }

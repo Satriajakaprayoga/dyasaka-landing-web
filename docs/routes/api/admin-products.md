@@ -19,7 +19,7 @@ Body: `{ id, category_id?, name?, description?, price?, is_active? }` — whitel
 
 Query: `?id=` (400 when missing).
 1. Reads `product_images.image_url` first (rows cascade, Storage objects don't).
-2. `products.delete` — 500 when bookings still reference the product (RESTRICT).
+2. `products.delete` — the `trg_products_cancel_bookings` trigger (20261020140000) fires first: active bookings (pending/confirmed) become `cancelled`, all linked bookings get `product_id = null`, so the RESTRICT FK passes. A 409 ("masih dipakai booking") is only the backstop for when the migration hasn't been applied.
 3. Best-effort Storage cleanup: paths extracted via `image_url.split('/product-images/')[1]`, removed from the `product-images` bucket.
 
 → `{ ok: true }`.

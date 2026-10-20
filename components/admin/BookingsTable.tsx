@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Booking, BookingStatus, Product } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 import {
   BookingStatusBadge,
   Card,
@@ -14,9 +15,12 @@ import {
 } from "./ui";
 import { usePersistentFilters } from "./usePersistentFilters";
 import Pagination from "./Pagination";
+import ConfirmModal, { ModalLinkRow } from "./ConfirmModal";
 import { EyeIcon, PencilIcon, TrashIcon } from "./icons";
 
 type Row = Booking & { products: Pick<Product, "name"> | null };
+
+type Impact = { blocked: boolean; lines: { text: string; danger: boolean }[] };
 
 const statusOptions: { value: BookingStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -31,6 +35,8 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRow, setConfirmRow] = useState<Row | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
   const [filters, setFilter, resetFilters] = usePersistentFilters<{
     q: string;
     status: string;
@@ -102,28 +108,76 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
     router.refresh();
   }
 
-  async function handleDelete(b: Row) {
-    if (
-      !confirm(
-        `Hapus booking ${b.customer_name} (${formatDate(b.event_date)})?`,
-      )
-    )
-      return;
+  // Deleting a booking cascades to booking_items + checklist_items and
+  // the capacity trigger recalculates the event date afterwards.
+  async function computeImpact(b: Row): Promise<Impact> {
+    const [items, checklist] = await Promise.all([
+      supabase
+        .from("booking_items")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_id", b.id),
+      supabase
+        .from("checklist_items")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_id", b.id),
+    ]);
 
-    setBusyId(b.id);
+    const lines: Impact["lines"] = [];
+    if ((items.count ?? 0) > 0) {
+      lines.push({
+        text: `${items.count} item booking akan ikut terhapus.`,
+        danger: false,
+      });
+    }
+    if ((checklist.count ?? 0) > 0) {
+      lines.push({
+        text: `${checklist.count} baris checklist akan ikut terhapus.`,
+        danger: false,
+      });
+    }
+    if (b.status === "confirmed") {
+      lines.push({
+        text: "Booking confirmed — ketersediaan tanggal acara akan dihitung ulang.",
+        danger: false,
+      });
+    }
+    if (lines.length === 0) {
+      lines.push({ text: "Tidak ada data terkait — aman untuk dihapus.", danger: false });
+    }
+    return { blocked: false, lines };
+  }
+
+  function closeConfirm() {
+    setConfirmRow(null);
+    setImpact(null);
+  }
+
+  async function handleDeleteClick(b: Row) {
+    setConfirmRow(b);
+    setImpact(null);
+    setImpact(await computeImpact(b));
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
+
+    setBusyId(confirmRow.id);
     setError(null);
 
-    const res = await fetch(`/api/admin/bookings?id=${b.id}`, {
+    const res = await fetch(`/api/admin/bookings?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setBusyId(null);
 
     if (!res.ok) {
       const body = await res.json();
+      closeConfirm();
+      setBusyId(null);
       setError(body.error ?? "Gagal menghapus booking");
       return;
     }
 
+    closeConfirm();
+    setBusyId(null);
     router.refresh();
   }
 
@@ -284,7 +338,7 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => handleDelete(b)}
+                        onClick={() => handleDeleteClick(b)}
                         disabled={busyId === b.id}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                       >
@@ -307,6 +361,45 @@ export default function BookingsTable({ rows }: { rows: Row[] }) {
         pageSize={PAGE_SIZE}
         onPageChange={changePage}
       />
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={
+          confirmRow
+            ? `Hapus booking ${confirmRow.customer_name} (${formatDate(confirmRow.event_date)})?`
+            : ""
+        }
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={busyId !== null}
+        onConfirm={performDelete}
+        onClose={closeConfirm}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          <>
+            {impact.lines.map((line, i) => (
+              <p
+                key={i}
+                className={
+                  line.danger
+                    ? "font-medium text-red-600"
+                    : "text-gray-600"
+                }
+              >
+                {line.text}
+              </p>
+            ))}
+            {confirmRow && (
+              <ModalLinkRow
+                href={`/admin/bookings/${confirmRow.id}`}
+                main="Lihat detail booking"
+                sub={confirmRow.products?.name ?? "Custom"}
+              />
+            )}
+          </>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

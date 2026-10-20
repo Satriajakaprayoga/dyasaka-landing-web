@@ -88,7 +88,14 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('categories').delete().eq('id', id);
 
   if (error) {
-    // e.g. category still referenced by products (ON DELETE RESTRICT)
+    // 23503 = foreign key violation: category still referenced by
+    // products or items (both ON DELETE RESTRICT).
+    if (error.code === '23503') {
+      return NextResponse.json(
+        { error: 'Kategori tidak dapat dihapus karena masih dipakai produk atau item.' },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

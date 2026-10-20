@@ -37,7 +37,7 @@ Client-side, 10 rows per page (`components/admin/Pagination.tsx`). Page number i
 ## Interactions
 
 - Row **Ubah** → `/admin/products/[id]/edit`.
-- Row **Hapus** → `confirm()` → `DELETE /api/admin/products?id=` → `router.refresh()`. Server also removes the product's Storage objects (best effort).
+- Row **Hapus** → `ConfirmModal` with impact check: counts active bookings (shown as "akan dibatalkan" — the DB trigger `trg_products_cancel_bookings` cancels pending/confirmed bookings and unlinks the rest), plus cascade info (`product_images` incl. storage files, `product_items` recipe rows). Every linked booking is listed inside the modal (`ImpactBookingList`, active first) as a clickable link to its booking detail for inspection before confirming → confirm → `DELETE /api/admin/products?id=` → `router.refresh()`. The API returns a friendly 409 only if the trigger migration isn't applied, and removes the product's Storage objects (best effort).
 
 ## Navigation
 

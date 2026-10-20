@@ -110,8 +110,18 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('items').delete().eq('id', id);
 
   if (error) {
-    // e.g. variants with stock/price history or recipe/booking references
-    // block the cascade (ON DELETE RESTRICT deeper in the chain)
+    // 23503 = foreign key violation: a variant is still referenced by
+    // price history, stock movements, product_items, or booking_items
+    // (all ON DELETE RESTRICT deeper in the cascade chain).
+    if (error.code === '23503') {
+      return NextResponse.json(
+        {
+          error:
+            'Item tidak dapat dihapus karena variannya masih dipakai (riwayat stok/harga, resep produk, atau booking).',
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

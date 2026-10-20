@@ -11,6 +11,7 @@ import {
   inputClass,
   labelClass,
 } from "./ui";
+import ConfirmModal from "./ConfirmModal";
 import { PlusIcon, TrashIcon } from "./icons";
 
 export type RecipeVariant = {
@@ -161,6 +162,7 @@ export default function RecipePanel({
   const [rowError, setRowError] = useState<string | null>(null);
   // Local editable quantity per row; persisted on blur when changed.
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
+  const [confirmRow, setConfirmRow] = useState<RecipeRow | null>(null);
 
   const catalogById = new Map(
     catalog.flatMap((item) =>
@@ -227,28 +229,31 @@ export default function RecipePanel({
     router.refresh();
   }
 
-  async function handleDelete(row: RecipeRow) {
-    const name = variantLabel(
-      row.item_variants?.items?.name,
-      row.item_variants?.color,
-      row.item_variants?.size,
-    );
-    if (!confirm(`Hapus "${name}" dari paket?`)) return;
+  // product_items has no children — plain confirm, no impact query.
+  function handleDeleteClick(row: RecipeRow) {
+    setConfirmRow(row);
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
 
     setBusy(true);
     setRowError(null);
 
-    const res = await fetch(`/api/admin/product-items?id=${row.id}`, {
+    const res = await fetch(`/api/admin/product-items?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setBusy(false);
 
     if (!res.ok) {
       const body = await res.json();
+      setConfirmRow(null);
+      setBusy(false);
       setRowError(body.error ?? "Gagal menghapus item");
       return;
     }
 
+    setConfirmRow(null);
+    setBusy(false);
     router.refresh();
   }
 
@@ -344,7 +349,7 @@ export default function RecipePanel({
                     </label>
                     <button
                       type="button"
-                      onClick={() => handleDelete(row)}
+                      onClick={() => handleDeleteClick(row)}
                       disabled={busy}
                       className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                     >
@@ -357,6 +362,23 @@ export default function RecipePanel({
           </Card>
         )
       )}
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={
+          confirmRow
+            ? `Hapus "${variantLabel(
+                confirmRow.item_variants?.items?.name,
+                confirmRow.item_variants?.color,
+                confirmRow.item_variants?.size,
+              )}" dari paket?`
+            : ""
+        }
+        description="Baris resep dihapus dari paket ini. Booking yang sudah ada tidak berubah."
+        busy={busy}
+        onConfirm={performDelete}
+        onClose={() => setConfirmRow(null)}
+      />
     </div>
   );
 }

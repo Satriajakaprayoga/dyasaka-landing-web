@@ -140,7 +140,13 @@ categories 1───* products 1───* product_images
   (20261007120000_public_booking_insert.sql) powers the storefront booking
   modal, with a `WITH CHECK` that forces `status = 'pending'` /
   `project_status = 'not_started'`, requires an active product and a future
-  date, and bounds input lengths.
+  date, and bounds input lengths. `product_id` keeps its `ON DELETE
+  RESTRICT` FK, but a BEFORE DELETE trigger on `products`
+  (`trg_products_cancel_bookings`, 20261020140000) runs first: active
+  bookings become `cancelled`, every linked booking loses `product_id`
+  (the column is nullable since 20261020120000), and the normal capacity
+  chain frees the dates — so deleting a catalog product never orphans or
+  silently destroys bookings.
 
 ### The capacity trigger (`recalc_date_capacity` / `bookings_after_change`)
 

@@ -14,6 +14,9 @@ import {
 } from "@/components/admin/ui";
 import { PencilIcon, PlusIcon, TagIcon, TrashIcon } from "@/components/admin/icons";
 import Pagination from "@/components/admin/Pagination";
+import ConfirmModal from "@/components/admin/ConfirmModal";
+
+type Impact = { blocked: boolean; lines: { text: string; danger: boolean }[] };
 
 export default function CategoriesPage() {
   const router = useRouter();
@@ -26,6 +29,9 @@ export default function CategoriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [page, setPage] = useState(1);
+  const [confirmRow, setConfirmRow] = useState<Category | null>(null);
+  const [impact, setImpact] = useState<Impact | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const PAGE_SIZE = 8;
   const totalPages = Math.max(1, Math.ceil(categories.length / PAGE_SIZE));
@@ -107,26 +113,72 @@ export default function CategoriesPage() {
     router.refresh();
   }
 
-  async function handleDelete(c: Category) {
-    if (!confirm(`Hapus kategori "${c.name}"?`)) return;
+  // categories is RESTRICT-referenced by products AND items — either
+  // one blocks the delete.
+  async function computeImpact(c: Category): Promise<Impact> {
+    const [products, items] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("category_id", c.id),
+      supabase
+        .from("items")
+        .select("id", { count: "exact", head: true })
+        .eq("category_id", c.id),
+    ]);
 
-    setBusyId(c.id);
+    const lines: Impact["lines"] = [];
+    const blocked = (products.count ?? 0) > 0 || (items.count ?? 0) > 0;
+
+    if ((products.count ?? 0) > 0) {
+      lines.push({
+        text: `Masih dipakai ${products.count} produk — pindahkan produk ke kategori lain terlebih dahulu.`,
+        danger: true,
+      });
+    }
+    if ((items.count ?? 0) > 0) {
+      lines.push({
+        text: `Masih dipakai ${items.count} item inventori — pindahkan item ke kategori lain terlebih dahulu.`,
+        danger: true,
+      });
+    }
+    if (lines.length === 0) {
+      lines.push({ text: "Tidak ada data terkait — aman untuk dihapus.", danger: false });
+    }
+    return { blocked, lines };
+  }
+
+  function closeConfirm() {
+    setConfirmRow(null);
+    setImpact(null);
+  }
+
+  async function handleDeleteClick(c: Category) {
+    setConfirmRow(c);
+    setImpact(null);
+    setImpact(await computeImpact(c));
+  }
+
+  async function performDelete() {
+    if (!confirmRow) return;
+
+    setDeleting(true);
     setError(null);
 
-    const res = await fetch(`/api/admin/categories?id=${c.id}`, {
+    const res = await fetch(`/api/admin/categories?id=${confirmRow.id}`, {
       method: "DELETE",
     });
-    setBusyId(null);
 
     if (!res.ok) {
       const body = await res.json();
-      setError(
-        body.error ??
-          "Gagal menghapus kategori (pastikan tidak masih dipakai produk)",
-      );
+      closeConfirm();
+      setDeleting(false);
+      setError(body.error ?? "Gagal menghapus kategori");
       return;
     }
 
+    closeConfirm();
+    setDeleting(false);
     loadCategories();
     router.refresh();
   }
@@ -247,7 +299,7 @@ export default function CategoriesPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(c)}
+                      onClick={() => handleDeleteClick(c)}
                       disabled={busyId === c.id}
                       className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                     >
@@ -276,6 +328,33 @@ export default function CategoriesPage() {
           />
         )}
       </Card>
+
+      <ConfirmModal
+        open={confirmRow !== null}
+        title={confirmRow ? `Hapus kategori "${confirmRow.name}"?` : ""}
+        description="Tindakan ini tidak dapat dibatalkan."
+        busy={deleting}
+        disabled={impact?.blocked ?? false}
+        onConfirm={performDelete}
+        onClose={closeConfirm}
+      >
+        {!impact ? (
+          <p className="text-gray-500">Memeriksa relasi data…</p>
+        ) : (
+          impact.lines.map((line, i) => (
+            <p
+              key={i}
+              className={
+                line.danger
+                  ? "font-medium text-red-600"
+                  : "text-gray-600"
+              }
+            >
+              {line.text}
+            </p>
+          ))
+        )}
+      </ConfirmModal>
     </div>
   );
 }
