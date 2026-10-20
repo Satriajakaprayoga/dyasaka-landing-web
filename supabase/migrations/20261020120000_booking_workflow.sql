@@ -172,8 +172,11 @@ for each row
 when (new.status = 'done' and old.status is distinct from 'done')
 execute function sync_checklist_rental_status();
 
--- Trigger-invoked functions don't need EXECUTE for callers; direct
--- calls stay locked down.
+-- Direct EXECUTE stays locked down for client roles; the EXECUTE the
+-- trigger invocations need is granted in 20261020130000 (Postgres
+-- checks EXECUTE on trigger functions at invocation, against the DML
+-- role — checklist triggers fire from admin actions, i.e. as
+-- `authenticated`).
 revoke all on function generate_booking_checklist() from public;
 revoke all on function generate_booking_checklist() from anon;
 revoke all on function generate_booking_checklist() from authenticated;

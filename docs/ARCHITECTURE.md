@@ -164,11 +164,17 @@ Interpretation:
   time it is touched — so rows only exist for dates that have booking history.
   Missing rows are interpreted by the app as "fully open"
   (`isDateAvailable` in lib/booking-helpers.ts:29).
-- Since public booking inserts exist, `recalc_date_capacity()` runs as
-  **SECURITY DEFINER** (same migration): the trigger executes with the
-  inserting role's privileges, and anon must not be able to write
-  `date_capacity` — so the counter maintenance runs as the table owner
-  instead, with direct `EXECUTE` revoked from every role.
+- Since public booking inserts exist, the whole capacity-trigger chain runs
+  as **SECURITY DEFINER** (20261007120000, corrected in 20261020130000):
+  Postgres checks `EXECUTE` on trigger functions at invocation against the
+  DML role, and likewise for calls made *inside* a function — so the entry
+  point `bookings_after_change()` is itself SECURITY DEFINER and its
+  internal `recalc_date_capacity()` call is privilege-checked as the table
+  owner. anon must never write `date_capacity`, and `recalc_date_capacity`
+  keeps direct `EXECUTE` revoked from every client role; the DML roles hold
+  `EXECUTE` only on the trigger functions they legitimately fire
+  (`bookings_after_change` → anon + authenticated, the checklist triggers
+  from 20261020120000 → authenticated).
 
 ---
 
