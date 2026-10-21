@@ -139,3 +139,67 @@ export type ChecklistItem = {
   completed_at: string | null;
   sort_order: number;
 };
+
+// ---------- Company settings (§8) ----------
+
+export type CompanyProfile = {
+  id: string;
+  company_name: string;
+  logo_url: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  instagram_url: string | null;
+  facebook_url: string | null;
+  tiktok_url: string | null;
+  updated_at: string;
+};
+
+export type CompanyBankAccount = {
+  id: string;
+  bank_name: string;
+  account_holder: string;
+  account_number: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// ---------- Invoices (§9) ----------
+
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void';
+
+export type InvoiceLineSource = 'item' | 'vendor' | 'transport' | 'custom';
+
+export type Invoice = {
+  id: string;
+  // Unique — one invoice per booking (DP is a payment against it).
+  booking_id: string;
+  invoice_number: string | null;
+  access_token: string;
+  status: InvoiceStatus;
+  issue_date: string | null;
+  due_date: string | null;
+  subtotal: number;
+  total: number;
+  amount_paid: number;
+  balance_due: number;
+  bank_account_id: string | null;
+  company_name_snapshot: string | null;
+  bank_account_snapshot: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InvoiceItem = {
+  id: string;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  source_type: InvoiceLineSource;
+  sort_order: number;
+};

@@ -69,3 +69,24 @@ export function buildGeneralWhatsAppLink(): string | null {
     "Halo Dyasaka Decoration, saya ingin bertanya tentang dekorasi balon.";
   return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 }
+
+/**
+ * wa.me deep link with an arbitrary prefilled message — used for
+ * admin-to-customer sends (e.g. handing over an invoice link).
+ */
+export function buildWhatsAppLink(phone: string, message: string): string {
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * Normalizes an Indonesian phone number as typed in a booking
+ * ("0812-3456-7890", "812...", "+62 812...") to the international
+ * digit-only form wa.me expects ("6281234567890"). Falls back to
+ * the stripped digits when nothing matches the local patterns.
+ */
+export function normalizePhoneToWa(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+  if (digits.startsWith("8")) return `62${digits}`;
+  return digits;
+}

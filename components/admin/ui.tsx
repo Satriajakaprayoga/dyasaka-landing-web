@@ -1,4 +1,9 @@
-import type { BookingStatus, ProjectStatus, RentalStatus } from "@/lib/types";
+import type {
+  BookingStatus,
+  InvoiceStatus,
+  ProjectStatus,
+  RentalStatus,
+} from "@/lib/types";
 import Link from "next/link";
 import { ArrowLeftIcon, InboxIcon } from "./icons";
 
@@ -177,6 +182,19 @@ const rentalStatusMap: Record<RentalStatus, { label: string; tone: BadgeTone }> 
 
 export function RentalStatusBadge({ status }: { status: RentalStatus }) {
   const s = rentalStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+const invoiceStatusMap: Record<InvoiceStatus, { label: string; tone: BadgeTone }> =
+  {
+    draft: { label: "Draft", tone: "gray" },
+    issued: { label: "Terbit", tone: "blue" },
+    paid: { label: "Lunas", tone: "green" },
+    void: { label: "Dibatalkan", tone: "red" },
+  };
+
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  const s = invoiceStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 

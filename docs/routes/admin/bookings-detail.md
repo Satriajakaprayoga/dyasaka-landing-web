@@ -28,6 +28,7 @@ Customer name + `BookingStatusBadge` + `ProjectStatusBadge` + DP badge (green ti
 
 - **Tandai DP Diterima** (hidden once set) — `confirm()` → `PATCH /api/admin/bookings { dp_received_at }` → refresh. The DB trigger `trg_bookings_generate_checklist` builds the checklist.
 - **Status Proyek** `<select>` (manual) — `PATCH { project_status }` → refresh.
+- **Buat Invoice** / **Lihat Invoice** — the page also fetches the booking's invoice (`id, status`, one per booking). Without one: **Buat Invoice** → `POST /api/admin/invoices` (draft prefilled from the booking's items + transport) → pushes to `/admin/bookings/[id]/invoice/[invoiceId]`. With one: a **Lihat Invoice** link to the same route.
 
 ## Summary card
 

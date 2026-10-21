@@ -18,10 +18,11 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 | `/catalog` | [public/catalog.md](public/catalog.md) | Active products with search + filters (URL params), pagination |
 | `/product/[id]` | [public/product-detail.md](public/product-detail.md) | Gallery + lightbox, price, WhatsApp inquiry, booking modal, availability calendar |
 | `/availability` | [public/availability.md](public/availability.md) | Public availability calendar (7 months ahead) |
+| `/invoice/[token]` | [public/invoice-view.md](public/invoice-view.md) | Customer invoice by unguessable token (app root, standalone like `/offline`); print-to-PDF, `noindex` |
 
 ## Admin panel (`app/admin/(panel)` — session required)
 
-Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing Kategori, Lihat Situs, and Keluar.
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing Kategori, Pengaturan, Lihat Situs, and Keluar.
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
@@ -39,6 +40,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/admin/items/[id]` | [admin/items-detail.md](admin/items-detail.md) | Variant management, stock movements, price history |
 | `/admin/items/[id]/edit` | [admin/items-edit.md](admin/items-edit.md) | Edit item master data |
 | `/admin/categories` | [admin/categories.md](admin/categories.md) | Product category CRUD (inline rename, pagination) |
+| `/admin/settings` | [admin/settings.md](admin/settings.md) | Company profile (single row, logo upload) + bank account list for invoices |
 
 ## API routes (`app/api/admin` — JSON, session required)
 
@@ -53,6 +55,9 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/api/admin/checklist-items` | [api/admin-checklist-items.md](api/admin-checklist-items.md) | POST (free-text row), PATCH, DELETE |
 | `/api/admin/item-variants` | [api/admin-item-variants.md](api/admin-item-variants.md) | POST, PATCH, DELETE |
 | `/api/admin/stock-movements` | [api/admin-stock-movements.md](api/admin-stock-movements.md) | POST |
+| `/api/admin/company-profile` | [api/admin-company-profile.md](api/admin-company-profile.md) | PATCH (single seeded row — no POST by design) |
+| `/api/admin/bank-accounts` | [api/admin-bank-accounts.md](api/admin-bank-accounts.md) | POST, PATCH (allow-list), DELETE |
+| `/api/admin/invoices` | [api/admin-invoices.md](api/admin-invoices.md) | POST (draft + prefill), PATCH (`action` dispatch: save-lines / issue / record-payment / void), DELETE (draft only) |
 
 ## Infrastructure routes
 

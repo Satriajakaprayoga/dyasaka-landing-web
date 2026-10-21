@@ -448,6 +448,11 @@ price" principle as `booking_items.unit_price`.
 - `total`
 - `amount_paid` — for example the down payment received
 - `balance_due`
+- `bank_account_id` — FK → `company_bank_accounts`, `on delete set null`;
+  the draft-time working reference for which account to show. Only used
+  while drafting — at issue the account is copied into
+  `bank_account_snapshot` and the snapshot is what invoices display
+  forever after
 - `company_name_snapshot` — company name as it was when issued
 - `bank_account_snapshot` — the bank name, holder and number shown on this
   invoice, copied as text when issued
@@ -464,7 +469,7 @@ the transport fee, or be typed freely by the admin.
 - `description`
 - `quantity`
 - `unit_price`
-- `line_total`
+- `line_total` — GENERATED ALWAYS AS (`quantity` * `unit_price`) STORED
 - `source_type` — one of: `item`, `vendor`, `transport`, `custom`
 - `sort_order`
 
@@ -481,10 +486,12 @@ the transport fee, or be typed freely by the admin.
 - An invoice in `draft` status is never visible through the public link.
   Voiding an invoice keeps the row and changes its status; nothing is deleted.
 
-**Open decision:** one invoice per booking, or separate down-payment and final
-invoices. If separate, add an `invoice_type` field (`dp` or `final`) and allow
-many invoices per booking. Until decided, design `booking_id` as a plain
-foreign key without a unique constraint, so both options remain possible.
+**Decision (recorded):** one invoice per booking. `booking_id` is a UNIQUE
+foreign key (`on delete cascade`), so a booking cannot grow a second invoice;
+the down payment is recorded as a payment against that single invoice
+(`amount_paid` / `balance_due`), not as a separate DP invoice. Voided rows are
+kept and their numbers are never reused — the invoice number sequence counts
+every invoice issued in the month, regardless of later status.
 
 ---
 

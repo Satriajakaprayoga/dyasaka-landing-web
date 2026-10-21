@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ProjectStatus } from "@/lib/types";
+import type { InvoiceStatus, ProjectStatus } from "@/lib/types";
 import { btnPrimary, btnSecondary, inputClass } from "./ui";
 
 const projectStatusOptions: { value: ProjectStatus; label: string }[] = [
@@ -18,12 +18,16 @@ type Props = {
   bookingId: string;
   dpReceivedAt: string | null;
   projectStatus: ProjectStatus;
+  invoiceId: string | null;
+  invoiceStatus: InvoiceStatus | null;
 };
 
 export default function BookingDetailActions({
   bookingId,
   dpReceivedAt,
   projectStatus,
+  invoiceId,
+  invoiceStatus,
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -47,6 +51,32 @@ export default function BookingDetailActions({
       }
 
       router.refresh();
+    } catch {
+      setError("Gagal terhubung ke server. Coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createInvoice() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/admin/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking_id: bookingId }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Gagal membuat invoice");
+        return;
+      }
+
+      const { invoice } = await res.json();
+      router.push(`/admin/bookings/${bookingId}/invoice/${invoice.id}`);
     } catch {
       setError("Gagal terhubung ke server. Coba lagi.");
     } finally {
@@ -101,6 +131,24 @@ export default function BookingDetailActions({
           className={btnPrimary}
         >
           Tandai DP Diterima
+        </button>
+      )}
+
+      {invoiceId ? (
+        <a
+          href={`/admin/bookings/${bookingId}/invoice/${invoiceId}`}
+          className={btnSecondary}
+        >
+          Lihat Invoice
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={createInvoice}
+          disabled={busy}
+          className={btnPrimary}
+        >
+          Buat Invoice
         </button>
       )}
     </div>

@@ -313,8 +313,9 @@ also needs rented chairs/tables and a location-dependent transport cost.
 ### Admin side
 
 - From a booking, the admin creates an invoice. The lines are prefilled from
-  the booking's items, its vendors and the transport fee, and the admin can
-  edit, remove or add custom lines before issuing
+  the booking's items (as frozen copies) plus the transport fee when set;
+  vendor lines are added by hand when needed. The admin can edit, remove or
+  add custom lines before issuing
 - Choose which active bank account is shown on the invoice
 - Issuing the invoice assigns the invoice number, freezes all lines and
   totals, and copies the company name and chosen bank account into the invoice
@@ -331,17 +332,26 @@ also needs rented chairs/tables and a location-dependent transport cost.
 - The invoice page shows company logo and name, customer and event details,
   the line items, totals, amount paid, balance due and the bank account to pay
   into
-- A "Download PDF" button generates the PDF on demand from the stored invoice
-  data
+- A "Download PDF" button opens the browser's print dialog, where the
+  customer saves the invoice as PDF — generated on demand from the stored
+  invoice data, no PDF files are stored
 - A wrong or unknown link shows a plain "not found" page and reveals nothing
   about other invoices
 - Draft and void invoices are not viewable through the public link
 
-### Open decision
+### Decisions (recorded)
 
-One invoice per booking, or separate DP and final invoices. Confirm before
-building the invoice creation screen, since it decides whether a booking can
-have several invoices.
+- **One invoice per booking.** `invoices.booking_id` is UNIQUE; the down
+  payment is recorded as a payment (`amount_paid`) against that single
+  invoice rather than as a separate DP invoice. A wrong issued invoice is
+  voided, but the booking still keeps its one invoice slot — the voided
+  number is never reused.
+- Invoice numbers follow `INV/YYYY/MM/NNNN` (per-month sequence, zero-padded,
+  assigned at issue; concurrent issues retry on the unique constraint).
+- PDFs come from the browser print dialog, not a PDF library.
+- Draft lines are only prefilled from booking items + transport; vendor
+  lines are typed by the admin when needed, and drafts never auto-resync
+  when the booking changes afterwards.
 
 ---
 

@@ -12,6 +12,7 @@ import {
   LayersIcon,
   LogOutIcon,
   PackageIcon,
+  SettingsIcon,
   TagIcon,
   XIcon,
 } from "./icons";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/admin/items", label: "Inventori", icon: LayersIcon },
   { href: "/admin/bookings", label: "Booking", icon: CalendarIcon },
   { href: "/admin/categories", label: "Kategori", icon: TagIcon },
+  { href: "/admin/settings", label: "Pengaturan", icon: SettingsIcon },
 ];
 
 export default function AdminSidebar() {

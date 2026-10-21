@@ -40,6 +40,13 @@ export default async function BookingDetailPage({
     notFound();
   }
 
+  // One invoice per booking — fetch just enough for the action button.
+  const { data: invoiceRef } = await supabase
+    .from("invoices")
+    .select("id, status")
+    .eq("booking_id", params.id)
+    .maybeSingle();
+
   const b = booking as BookingWithProduct;
 
   return (
@@ -80,6 +87,8 @@ export default async function BookingDetailPage({
           bookingId={b.id}
           dpReceivedAt={b.dp_received_at}
           projectStatus={b.project_status}
+          invoiceId={invoiceRef?.id ?? null}
+          invoiceStatus={invoiceRef?.status ?? null}
         />
       </div>
 
