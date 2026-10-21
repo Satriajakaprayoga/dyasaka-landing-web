@@ -1,5 +1,6 @@
 import Link from "next/link";
 import PageTransition from "@/components/admin/PageTransition";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 
 export default function PublicLayout({
   children,
@@ -27,6 +28,7 @@ export default function PublicLayout({
         </nav>
       </header>
       <PageTransition>{children}</PageTransition>
+      <SiteFooter />
     </>
   );
 }

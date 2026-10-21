@@ -35,9 +35,41 @@ body {
   animation: balloon-float 1.6s ease-in-out infinite;
 }
 
+@keyframes balloon-drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-28px) rotate(5deg);
+  }
+}
+
+.animate-balloon-drift {
+  animation: balloon-drift 7s ease-in-out infinite;
+}
+
+@keyframes confetti-fall {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(18px) rotate(45deg);
+    opacity: 1;
+  }
+}
+
+.animate-confetti-fall {
+  animation: confetti-fall 4.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-page-in,
-  .animate-balloon-float {
+  .animate-balloon-float,
+  .animate-balloon-drift,
+  .animate-confetti-fall {
     animation: none;
   }
 }

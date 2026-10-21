@@ -56,3 +56,16 @@ export function buildWhatsAppInquiryLink(params: {
 
   return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 }
+
+/**
+ * wa.me link for general (non-product) inquiries — landing CTA, footer, etc.
+ * Returns null when the business number isn't configured so callers can hide
+ * the WhatsApp button instead of linking to a dead wa.me URL.
+ */
+export function buildGeneralWhatsAppLink(): string | null {
+  const phoneNumber = process.env.NEXT_PUBLIC_BUSINESS_WA_NUMBER;
+  if (!phoneNumber) return null;
+  const message =
+    "Halo Dyasaka Decoration, saya ingin bertanya tentang dekorasi balon.";
+  return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+}

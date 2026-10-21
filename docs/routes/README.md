@@ -8,11 +8,13 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 - **Filter persistence** (`components/admin/usePersistentFilters.ts`) — the Produk, Inventori, and Booking tables keep their filters across navigation. URL search params are the source of truth (shareable, browser back/forward friendly); sessionStorage mirrors them per feature, so returning to the feature with a clean URL restores the last filters. **Reset Filter** clears both.
 - **Pagination** (`components/admin/Pagination.tsx`) — client-side slicing of the filtered rows with numbered pages + prev/next ("Menampilkan X–Y dari Z"). The page number lives in the same persistent filter state (`?page=`), any filter change resets to page 1, page changes scroll back to the top, and deleting the last row of the last page clamps safely.
 
-## Public site (`app/(public)` — shared header, no auth)
+## Public site (`app/(public)` — shared header + footer, no auth)
+
+`app/(public)/layout.tsx` renders the public header nav and `SiteFooter` (`components/landing/SiteFooter.tsx`) around every public route.
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
-| `/` | [public/home.md](public/home.md) | Landing page, CTAs to catalog & availability |
+| `/` | [public/home.md](public/home.md) | Dynamic landing page (`ƒ`): hero, featured packages, categories, gallery, how-to-order, testimonials, FAQ, WhatsApp CTA band |
 | `/catalog` | [public/catalog.md](public/catalog.md) | Active products with search + filters (URL params), pagination |
 | `/product/[id]` | [public/product-detail.md](public/product-detail.md) | Gallery + lightbox, price, WhatsApp inquiry, booking modal, availability calendar |
 | `/availability` | [public/availability.md](public/availability.md) | Public availability calendar (7 months ahead) |
