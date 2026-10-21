@@ -9,9 +9,10 @@
 
 ## Access rules
 
-- The token is the **only** credential: `access_token` is a
-  `gen_random_bytes(32)` hex string, unique per invoice. Links are
-  handed to the customer over WhatsApp from the invoice manager.
+- The token is the **only** credential: `access_token` is a 64-char
+  hex string (two built-in `gen_random_uuid()` calls), unique per
+  invoice. Links are handed to the customer over WhatsApp from the
+  invoice manager.
 - The public path is **only** the security-definer RPC
   `get_invoice_by_token(p_token)` — anon has no SELECT policy on
   `invoices`/`invoice_items` at all. The RPC returns

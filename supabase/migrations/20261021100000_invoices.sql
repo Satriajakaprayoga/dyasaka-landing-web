@@ -15,9 +15,12 @@
 --     SELECT policy on invoices/invoice_items, ever.
 -- ============================================================
 
--- gen_random_bytes() for access_token (default on Supabase; the
--- guard keeps the file re-runnable on plain Postgres).
-create extension if not exists pgcrypto;
+-- access_token: 64 hex chars from two built-in gen_random_uuid()
+-- calls (~240 bits of randomness). Deliberately NOT pgcrypto's
+-- gen_random_bytes(): on Supabase that extension lives in the
+-- `extensions` schema, which the migration runner's search_path may
+-- not include (SQLSTATE 42883), and which schema it sits in varies
+-- per project. Built-ins resolve everywhere, PG13+.
 
 -- ---------- §9 invoices ----------
 
@@ -29,7 +32,8 @@ create table if not exists public.invoices (
   -- Assigned when the invoice is issued; drafts have null.
   invoice_number text unique,
   access_token text not null unique
-    default encode(gen_random_bytes(32), 'hex'),
+    default replace(gen_random_uuid()::text, '-', '')
+         || replace(gen_random_uuid()::text, '-', ''),
   status text not null default 'draft'
     check (status in ('draft', 'issued', 'paid', 'void')),
   issue_date date,
