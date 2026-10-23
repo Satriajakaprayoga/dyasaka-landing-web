@@ -309,9 +309,11 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // Full rows — these same items are echoed back in the response,
+    // and the client rebuilds its editable lines from them.
     const { data: items } = await supabase
       .from('invoice_items')
-      .select('id, line_total')
+      .select('*')
       .eq('invoice_id', invoice.id)
       .order('sort_order');
 
