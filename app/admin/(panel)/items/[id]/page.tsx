@@ -49,8 +49,20 @@ export default async function ItemDetailPage({
             <h1 className="text-2xl font-semibold text-gray-900">
               {item.name}
             </h1>
-            <Badge tone={item.type === "rentable" ? "amber" : "blue"}>
-              {item.type === "rentable" ? "Sewa" : "Habis Pakai"}
+            <Badge
+              tone={
+                item.type === "rentable"
+                  ? "amber"
+                  : item.type === "service"
+                    ? "purple"
+                    : "blue"
+              }
+            >
+              {item.type === "rentable"
+                ? "Sewa"
+                : item.type === "service"
+                  ? "Jasa"
+                  : "Habis Pakai"}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">

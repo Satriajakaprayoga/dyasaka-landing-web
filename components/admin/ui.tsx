@@ -126,6 +126,7 @@ const badgeTones = {
   amber: "bg-amber-100 text-amber-700 ring-amber-600/20",
   red: "bg-red-100 text-red-700 ring-red-600/20",
   blue: "bg-blue-100 text-blue-700 ring-blue-600/20",
+  purple: "bg-purple-100 text-purple-700 ring-purple-600/20",
   gray: "bg-gray-100 text-gray-600 ring-gray-500/20",
 } as const;
 
@@ -189,6 +190,7 @@ const invoiceStatusMap: Record<InvoiceStatus, { label: string; tone: BadgeTone }
   {
     draft: { label: "Draft", tone: "gray" },
     issued: { label: "Terbit", tone: "blue" },
+    partially_paid: { label: "Bayar Sebagian", tone: "amber" },
     paid: { label: "Lunas", tone: "green" },
     void: { label: "Dibatalkan", tone: "red" },
   };
