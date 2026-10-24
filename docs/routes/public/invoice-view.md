@@ -16,10 +16,13 @@
 - The public path is **only** the security-definer RPC
   `get_invoice_by_token(p_token)` — anon has no SELECT policy on
   `invoices`/`invoice_items` at all. The RPC returns
-  `{ invoice, items, booking }` for `status ∈ ('issued','paid')` only,
-  with `access_token` stripped from the invoice object; draft, void and
+  `{ invoice, items, booking }` for
+  `status ∈ ('issued','partially_paid','paid')` only, with
+  `access_token` stripped from the invoice object; draft, void and
   unknown tokens are indistinguishable → `notFound()` (plain 404,
-  reveals nothing about other invoices).
+  reveals nothing about other invoices). A partially-paid invoice keeps
+  rendering (badge "Bayar Sebagian" + remaining balance) — missing it
+  from the filter would 404 a link that worked before the payment.
 - `company_profile` is read directly (public SELECT by design) so the
   logo/contact header stays live — the invoice itself is snapshotted at
   issue time.

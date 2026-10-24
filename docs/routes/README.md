@@ -22,7 +22,7 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 
 ## Admin panel (`app/admin/(panel)` — session required)
 
-Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing Kategori, Pengaturan, Lihat Situs, and Keluar.
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing the remaining sidebar items (Vendor, Kategori, Pengaturan, Lihat Situs, Keluar).
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
@@ -39,6 +39,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/admin/items/new` | [admin/items-new.md](admin/items-new.md) | Create item (consumable/rentable) with category autocomplete |
 | `/admin/items/[id]` | [admin/items-detail.md](admin/items-detail.md) | Variant management, stock movements, price history |
 | `/admin/items/[id]/edit` | [admin/items-edit.md](admin/items-edit.md) | Edit item master data |
+| `/admin/vendors` | [admin/vendors.md](admin/vendors.md) | Vendor CRUD (inline edit, delete un-assigns items) |
 | `/admin/categories` | [admin/categories.md](admin/categories.md) | Product category CRUD (inline rename, pagination) |
 | `/admin/settings` | [admin/settings.md](admin/settings.md) | Company profile (single row, logo upload) + bank account list for invoices |
 
@@ -50,6 +51,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/api/admin/categories` | [api/admin-categories.md](api/admin-categories.md) | POST, PATCH, DELETE |
 | `/api/admin/bookings` | [api/admin-bookings.md](api/admin-bookings.md) | POST (optional product + recipe seeding), PATCH (allow-list), DELETE |
 | `/api/admin/items` | [api/admin-items.md](api/admin-items.md) | POST, PATCH, DELETE |
+| `/api/admin/vendors` | [api/admin-vendors.md](api/admin-vendors.md) | POST, PATCH (allow-list), DELETE (SET NULL on items) |
 | `/api/admin/product-items` | [api/admin-product-items.md](api/admin-product-items.md) | POST (upsert), PATCH, DELETE |
 | `/api/admin/booking-items` | [api/admin-booking-items.md](api/admin-booking-items.md) | POST (checklist catch-up), PATCH, DELETE |
 | `/api/admin/checklist-items` | [api/admin-checklist-items.md](api/admin-checklist-items.md) | POST (free-text row), PATCH, DELETE |

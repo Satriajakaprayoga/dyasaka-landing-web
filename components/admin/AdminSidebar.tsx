@@ -14,6 +14,7 @@ import {
   PackageIcon,
   SettingsIcon,
   TagIcon,
+  UsersIcon,
   XIcon,
 } from "./icons";
 
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/admin", label: "Dashboard", icon: DashboardIcon },
   { href: "/admin/products", label: "Produk", icon: PackageIcon },
   { href: "/admin/items", label: "Inventori", icon: LayersIcon },
+  { href: "/admin/vendors", label: "Vendor", icon: UsersIcon },
   { href: "/admin/bookings", label: "Booking", icon: CalendarIcon },
   { href: "/admin/categories", label: "Kategori", icon: TagIcon },
   { href: "/admin/settings", label: "Pengaturan", icon: SettingsIcon },

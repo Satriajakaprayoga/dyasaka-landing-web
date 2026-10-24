@@ -21,8 +21,18 @@ import {
 } from "./ui";
 import { PlusIcon, TrashIcon } from "./icons";
 import ConfirmModal from "./ConfirmModal";
+import type { BookingCatalogItem } from "./BookingItemsPanel";
 
 type BookingRef = Pick<Booking, "id" | "customer_name" | "phone" | "event_date">;
+
+function variantTitle(
+  itemName: string | undefined,
+  color: string | null | undefined,
+  size: string | null | undefined,
+) {
+  const details = [color, size].filter(Boolean).join(", ");
+  return details ? `${itemName} (${details})` : (itemName ?? "Varian");
+}
 
 type EditableLine = {
   description: string;
@@ -45,6 +55,7 @@ type Props = {
   invoice: Invoice;
   initialItems: InvoiceItem[];
   bankAccounts: CompanyBankAccount[];
+  catalog: BookingCatalogItem[];
   companyName: string | null;
   logoUrl: string | null;
 };
@@ -54,6 +65,7 @@ export default function InvoiceManager({
   invoice: initialInvoice,
   initialItems,
   bankAccounts,
+  catalog,
   companyName,
   logoUrl,
 }: Props) {
@@ -70,7 +82,8 @@ export default function InvoiceManager({
   const [bankId, setBankId] = useState(initialInvoice.bank_account_id ?? "");
 
   const [paymentAmount, setPaymentAmount] = useState(() =>
-    initialInvoice.status === "issued"
+    initialInvoice.status === "issued" ||
+    initialInvoice.status === "partially_paid"
       ? String(initialInvoice.balance_due)
       : "",
   );
@@ -87,7 +100,14 @@ export default function InvoiceManager({
   }, []);
 
   const isDraft = invoice.status === "draft";
-  const isIssued = invoice.status === "issued";
+  // Editable-until-paid: draft/issued/partially_paid share the line
+  // editor; paid/void are strictly read-only.
+  const isEditable =
+    isDraft ||
+    invoice.status === "issued" ||
+    invoice.status === "partially_paid";
+  const isPayable =
+    invoice.status === "issued" || invoice.status === "partially_paid";
 
   const publicLink = `${origin}/invoice/${invoice.access_token}`;
 
@@ -102,7 +122,7 @@ export default function InvoiceManager({
     [lines],
   );
 
-  const draftHasLineIssues = parsedLines.some(
+  const hasLineIssues = parsedLines.some(
     (l) =>
       !l.description ||
       l.description.length > 200 ||
@@ -134,6 +154,55 @@ export default function InvoiceManager({
 
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // ---------- Catalog picker (same grouping as BookingItemsPanel) ----------
+
+  const [pickerVariantId, setPickerVariantId] = useState("");
+
+  const variantById = useMemo(
+    () =>
+      new Map(
+        catalog.flatMap((item) =>
+          item.item_variants.map((v) => [v.id, { item, variant: v }]),
+        ),
+      ),
+    [catalog],
+  );
+
+  const pickerGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; label: string }[]>();
+    for (const item of catalog) {
+      for (const v of item.item_variants) {
+        const list = groups.get(item.item_category) ?? [];
+        list.push({
+          id: v.id,
+          label: `${variantTitle(item.name, v.color, v.size)} — ${formatRupiah(v.current_price)}`,
+        });
+        groups.set(item.item_category, list);
+      }
+    }
+    return [...groups.entries()];
+  }, [catalog]);
+
+  function addFromCatalog(id: string) {
+    setPickerVariantId("");
+    const found = variantById.get(id);
+    if (!found) return;
+    // Vendor-owned items bill as vendor lines; house items as item lines.
+    setLines((prev) => [
+      ...prev,
+      {
+        description: variantTitle(
+          found.item.name,
+          found.variant.color,
+          found.variant.size,
+        ),
+        quantity: "1",
+        unit_price: String(found.variant.current_price),
+        source_type: found.item.vendor_id ? "vendor" : "item",
+      },
+    ]);
   }
 
   async function patchAction(
@@ -172,19 +241,21 @@ export default function InvoiceManager({
     }
   }
 
-  async function saveDraft() {
-    await patchAction("save-lines", {
+  async function saveLines() {
+    const saved = await patchAction("save-lines", {
       lines: parsedLines,
       due_date: dueDate || null,
       notes: notes || null,
       bank_account_id: bankId || null,
     });
+    // Edited totals change the balance — keep the payment input honest.
+    if (saved?.invoice) setPaymentAmount(String(saved.invoice.balance_due));
   }
 
   async function issue() {
     if (
       !confirm(
-        "Terbitkan invoice? Nomor invoice, baris, dan total akan dikunci dan tidak bisa diubah lagi.",
+        "Terbitkan invoice? Nomor invoice akan ditetapkan dan tautan pembayaran bisa dikirim ke pelanggan. Baris masih bisa dikoreksi setelah terbit.",
       )
     )
       return;
@@ -284,11 +355,17 @@ export default function InvoiceManager({
         </div>
       </Card>
 
-      {isDraft && (
+      {isEditable && (
         <Card className="p-5">
           <h2 className="mb-4 text-base font-semibold text-gray-900">
             Baris Invoice
           </h2>
+          {!isDraft && (
+            <p className="-mt-2 mb-4 text-xs text-gray-400">
+              Invoice sudah terbit — baris masih bisa dikoreksi. Total dan
+              status menyesuaikan pembayaran tercatat.
+            </p>
+          )}
 
           <div className="space-y-2">
             {lines.map((line, i) => (
@@ -341,15 +418,35 @@ export default function InvoiceManager({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={addLine}
-            disabled={busy}
-            className={btnSecondary + " mt-3"}
-          >
-            <PlusIcon className="h-4 w-4" />
-            Tambah Baris
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={addLine}
+              disabled={busy}
+              className={btnSecondary}
+            >
+              <PlusIcon className="h-4 w-4" />
+              Tambah Baris
+            </button>
+            <select
+              aria-label="Tambah dari katalog"
+              value={pickerVariantId}
+              onChange={(e) => addFromCatalog(e.target.value)}
+              disabled={busy}
+              className={inputClass + " w-72"}
+            >
+              <option value="">Tambah dari Katalog…</option>
+              {pickerGroups.map(([category, variants]) => (
+                <optgroup key={category} label={category}>
+                  {variants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
 
           <div className="mt-5 grid gap-4 border-t border-gray-100 pt-5 sm:grid-cols-3">
             <div>
@@ -402,45 +499,77 @@ export default function InvoiceManager({
               <span className="text-base font-semibold text-gray-900">
                 {formatRupiah(subtotal)}
               </span>
+              {!isDraft && (
+                <span className="mt-0.5 block text-xs">
+                  Dibayar {formatRupiah(Number(invoice.amount_paid))} · Sisa{" "}
+                  <span className="font-semibold text-gray-900">
+                    {formatRupiah(Number(invoice.balance_due))}
+                  </span>
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Hapus Draft
-              </button>
-              <button
-                type="button"
-                onClick={saveDraft}
-                disabled={busy || draftHasLineIssues}
-                className={btnSecondary}
-              >
-                {busy ? "…" : "Simpan Draft"}
-              </button>
-              <button
-                type="button"
-                onClick={issue}
-                disabled={busy || draftHasLineIssues || lines.length === 0 || !bankId}
-                title={
-                  lines.length === 0
-                    ? "Tambahkan minimal satu baris"
-                    : !bankId
-                      ? "Pilih rekening bank"
-                      : undefined
-                }
-                className={btnPrimary}
-              >
-                Terbitkan
-              </button>
+              {isDraft ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={busy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Hapus Draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveLines}
+                    disabled={busy || hasLineIssues}
+                    className={btnSecondary}
+                  >
+                    {busy ? "…" : "Simpan Draft"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={issue}
+                    disabled={
+                      busy || hasLineIssues || lines.length === 0 || !bankId
+                    }
+                    title={
+                      lines.length === 0
+                        ? "Tambahkan minimal satu baris"
+                        : !bankId
+                          ? "Pilih rekening bank"
+                          : undefined
+                    }
+                    className={btnPrimary}
+                  >
+                    Terbitkan
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={saveLines}
+                  disabled={
+                    busy || hasLineIssues || lines.length === 0 || !bankId
+                  }
+                  title={
+                    lines.length === 0
+                      ? "Invoice terbit minimal memiliki satu baris"
+                      : !bankId
+                        ? "Pilih rekening bank"
+                        : undefined
+                  }
+                  className={btnPrimary}
+                >
+                  {busy ? "…" : "Simpan Perubahan"}
+                </button>
+              )}
             </div>
           </div>
         </Card>
       )}
 
-      {!isDraft && (
+      {!isEditable && (
         <>
           <Card className="overflow-hidden">
             <table className="w-full text-sm">
@@ -503,7 +632,7 @@ export default function InvoiceManager({
             </div>
           </Card>
 
-          {isIssued && (
+          {isPayable && (
             <Card className="p-5">
               <h2 className="mb-4 text-base font-semibold text-gray-900">
                 Pembayaran &amp; Pengiriman
@@ -569,8 +698,8 @@ export default function InvoiceManager({
                 </a>
               </div>
               <p className="mb-4 text-xs text-gray-400">
-                Tautan ini bisa dibuka pelanggan tanpa login (status terbit /
-                lunas saja).
+                Tautan bisa dibuka pelanggan tanpa login selama invoice belum
+                dibatalkan.
               </p>
 
               <button

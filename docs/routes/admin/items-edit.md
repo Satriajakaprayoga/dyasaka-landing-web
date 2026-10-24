@@ -13,12 +13,12 @@ Edit item master data (variants/stock are managed on the detail page).
 
 ## Data
 
-- `items` where `id = [id]` (`.single()`) and all `items.item_category` values (aggregated `{ name, count }[]` for the autocomplete) — parallel.
+- `items` where `id = [id]` (`.single()`), all `items.item_category` values (aggregated `{ name, count }[]` for the autocomplete), and `vendors(id, name, is_active)` — parallel.
 - Unknown id → `notFound()`.
 
 ## Form (`ItemForm`, edit mode)
 
-- Same fields as create, prefilled; type toggle shows **Quantity Owned** only for `rentable`. Submits `PATCH /api/admin/items` with `{ id, …payload }`.
+- Same fields as create, prefilled; type toggle shows **Quantity Owned** only for `rentable`, vendor select lists inactive vendors suffixed "(nonaktif)". Submits `PATCH /api/admin/items` with `{ id, …payload }`.
 
 ## Navigation
 

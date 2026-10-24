@@ -13,7 +13,12 @@ behavior, flow, and what each screen/feature needs to do.
 > Paket"), booking item snapshots with `transport_fee` + custom bookings,
 > DP-received → auto checklist → 3-phase workflow with manual project status,
 > and the dashboard operational views
-> (`supabase/migrations/20261020120000_booking_workflow.sql`). The spec is
+> (`supabase/migrations/20261020120000_booking_workflow.sql`). Company
+> settings (§8) and invoices (§9) are implemented
+> (`20261021090000_company_settings.sql`,
+> `20261021100000_invoices.sql`, `20261024090000_invoice_partially_paid.sql`),
+> and §6 vendors shipped in a redesigned form (vendor → items, services as
+> items — see §6). The spec is
 > kept as written; differences from reality are noted inline.
 
 ---
@@ -158,16 +163,17 @@ This is the core new feature area.
 For each row in the booking's `booking_items`:
 
 - Always generate one `stock_check` phase row
-- Always generate one `pickup` phase row
+- Generate one `pickup` phase row for physical items — consumable and
+  rentable; `service` items (vendor services, section 6) get no pickup row
 - Generate one `return` phase row **only if** the item is `rentable` —
-  consumable items never get a return-phase row
+  consumable and service items never get a return-phase row
 - Admin can also manually add free-text checklist rows not tied to a specific
   item (e.g. "confirm venue address", "call customer to confirm arrival
   time") — these have `booking_item_id` left empty
 
-Vendors (`booking_vendors`) are **not** part of checklist generation — they
-have their own status field (`pending`/`confirmed`/`cancelled`) and are
-tracked separately. Do not generate `checklist_items` rows for vendors.
+On a service item's `stock_check` row, "Perlu Pesan" reads as "book/confirm
+the vendor" — there is no separate vendor-tracking row on the booking
+(see section 6).
 
 ### Stock-check phase (screen/behavior)
 
@@ -239,29 +245,38 @@ pages.
 
 ---
 
-## 6. Admin — Vendor Management (new)
+## 6. Admin — Vendor Management — **Implemented (redesigned)**
 
-### Vendor master data
+> The spec below was originally written as `vendors` + `vendor_services` +
+> `booking_vendors` (attaching vendors to bookings as separate rows). It was
+> **implemented in Oct 2026 with a simpler model** agreed with the
+> stakeholder:
+>
+> - The relation is **vendor → items** (`items.vendor_id`, nullable,
+>   `on delete set null`), never vendor → products — products are the
+>   business's own packages assembled from goods.
+> - **Services are items with `type = 'service'`** (photographer, clown) —
+>   ordinary item rows reusing variants for pricing and the existing
+>   pickers; no `vendor_services` table. One vendor per item; the same
+>   service from two vendors = two item rows (accepted at this scale).
+> - No `booking_vendors` rows: a vendor ends up on a booking by the admin
+>   adding the vendor's item to the booking items (the existing
+>   add-item mechanism), and on the invoice as a line with
+>   `source_type 'vendor'` (via the draft catalog picker) or a hand-typed
+>   line. The vendor itself never appears on the customer invoice.
+> - Checklist: service items get a `stock_check` row only ("book the
+>   vendor") — no pickup/return rows. The old double-booking warning
+>   doesn't exist in this model; rentable vendor property still gets the
+>   same-date availability warning via the booking items panel.
+> - Vendor fields: name, phone, note, `is_active` (admin-only RLS —
+>   no public select).
 
-- Create/edit `vendors` — name, `vendor_category` (plain string, e.g.
-  "Clown", "Photographer"), phone, address, social media, notes
-- Create/edit `vendor_services` under a vendor — optional predefined
-  offerings with a reference price; a vendor does not require any services
-  defined to be bookable
+### Vendor master data (as implemented)
 
-### Adding a vendor to a booking
-
-- From a booking, admin adds a `booking_vendors` row — selecting a vendor,
-  optionally a predefined `vendor_service`, and entering the `agreed_price`
-  actually negotiated for this event (independent of the service's reference
-  price)
-- **Double-booking check:** before confirming, check whether the same vendor
-  already has another `confirmed` `booking_vendors` row on the same
-  `event_date`. If so, show a warning banner to the admin — this does not
-  block the action; the admin has final say (the vendor may genuinely be able
-  to cover both events)
-- Vendor status (`pending`/`confirmed`/`cancelled`) is tracked independently
-  of the booking's own sales status and `project_status`
+- `/admin/vendors` CRUD — create/edit/delete vendors (name, phone, note,
+  is_active); deletion never blocks, it un-assigns items (`SET NULL`)
+- Item form has an optional **Vendor** select; the inventory list and
+  item detail show the type badge **Jasa** for service items
 
 ---
 
@@ -312,19 +327,25 @@ also needs rented chairs/tables and a location-dependent transport cost.
 
 ### Admin side
 
-- From a booking, the admin creates an invoice. The lines are prefilled from
-  the booking's items (as frozen copies) plus the transport fee when set;
-  vendor lines are added by hand when needed. The admin can edit, remove or
-  add custom lines before issuing
+- From a booking, the admin creates an invoice. The lines are prefilled as
+  copies: the package product first (when the booking has one, at its catalog
+  price), then the booking's items priced at the **live catalog price** at
+  creation time, plus the transport fee when set; vendor lines are added by
+  hand when needed. The draft editor also has a **catalog picker** (grouped
+  by item category, like the booking item picker) for adding further lines,
+  and the admin can edit, remove or add custom lines before issuing
 - Choose which active bank account is shown on the invoice
-- Issuing the invoice assigns the invoice number, freezes all lines and
-  totals, and copies the company name and chosen bank account into the invoice
-- Statuses: `draft` (editable, not visible to customers), `issued`, `paid`,
-  `void`. An issued invoice cannot be edited; to correct it, void it and create
-  a new one
+- Issuing the invoice assigns the invoice number and copies the company name
+  and chosen bank account into the invoice
+- Statuses: `draft`, `issued`, `partially_paid`, `paid`, `void` — an
+  editable-until-paid model (see Decisions). Issued and partially-paid
+  invoices stay editable (lines, due date, notes, bank account) so mistakes
+  can be corrected after the link was already sent; `paid` and `void` are
+  read-only
 - The admin gets the invoice link to send to the customer over WhatsApp
-- Recording the down payment updates `amount_paid` and `balance_due` on the
-  invoice
+- Recording a payment (for example the down payment) updates `amount_paid`
+  and `balance_due`; the status follows the money automatically — money in
+  but not settled → `partially_paid`, settled → `paid`
 
 ### Customer side
 
@@ -343,15 +364,25 @@ also needs rented chairs/tables and a location-dependent transport cost.
 
 - **One invoice per booking.** `invoices.booking_id` is UNIQUE; the down
   payment is recorded as a payment (`amount_paid`) against that single
-  invoice rather than as a separate DP invoice. A wrong issued invoice is
-  voided, but the booking still keeps its one invoice slot — the voided
-  number is never reused.
+  invoice rather than as a separate DP invoice.
+- **Editable until paid.** `draft`, `issued` and `partially_paid` are fully
+  editable — lines, due date, notes and bank account; saving recomputes
+  totals and re-derives the status from the payment math (`partially_paid`
+  is system-derived only, never chosen by hand). `paid` is strictly
+  read-only — no void, no payment reversal (a wrongly recorded final payment
+  can only be fixed by direct DB edit; accepted). `void` is read-only and
+  reachable only from `issued` / `partially_paid`. Deleting is draft-only,
+  so issued invoices keep their token links alive — void is the correction
+  path after issue.
 - Invoice numbers follow `INV/YYYY/MM/NNNN` (per-month sequence, zero-padded,
-  assigned at issue; concurrent issues retry on the unique constraint).
+  assigned at issue; concurrent issues retry on the unique constraint; voided
+  numbers are never reused).
 - PDFs come from the browser print dialog, not a PDF library.
-- Draft lines are only prefilled from booking items + transport; vendor
-  lines are typed by the admin when needed, and drafts never auto-resync
-  when the booking changes afterwards.
+- Draft lines are prefilled with the package product line, booking items at
+  live catalog prices (falling back to the booking's frozen price when the
+  variant is gone), and transport; further lines come from the draft editor's
+  catalog picker or are typed by hand (vendor lines); drafts never
+  auto-resync when the booking or catalog changes afterwards.
 
 ---
 
@@ -440,7 +471,11 @@ the same tables; the decision affects which screen is the main entry point.
 - Profit margin reporting (unit cost is recorded on purchase order lines only,
   nothing computes margins yet)
 - Automatic/zone-based transportation fee calculation
-- Hard-blocking vendor double-booking (warning only, per section 6)
+- ~~Hard-blocking vendor double-booking (warning only, per section 6)~~ —
+  obsolete under the implemented vendor model (§6): vendors attach via
+  items, so only rentable property gets the same-date availability warning
+- Per-vendor cost/margin tracking (`item_variants.cost_price` and profit
+  reporting stay out of scope)
 - Automatic reordering or supplier price comparison
 - Online payment inside the invoice page (the invoice only shows bank details)
 - Customer accounts or logins (invoice access is by private link only)

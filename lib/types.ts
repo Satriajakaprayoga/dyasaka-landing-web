@@ -54,7 +54,17 @@ export type Booking = {
 
 // ---------- Item master data ----------
 
-export type ItemType = 'consumable' | 'rentable';
+export type ItemType = 'consumable' | 'rentable' | 'service';
+
+export type Vendor = {
+  id: string;
+  name: string;
+  phone: string | null;
+  note: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
 
 export type Item = {
   id: string;
@@ -63,6 +73,7 @@ export type Item = {
   type: ItemType;
   pieces_per_unit: number | null;
   quantity_owned: number;
+  vendor_id: string | null;
 };
 
 export type ItemVariant = {
@@ -168,7 +179,14 @@ export type CompanyBankAccount = {
 
 // ---------- Invoices (§9) ----------
 
-export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void';
+// partially_paid is system-derived only (amount_paid > 0 &&
+// balance_due > 0) — the API recomputes it on every write.
+export type InvoiceStatus =
+  | 'draft'
+  | 'issued'
+  | 'partially_paid'
+  | 'paid'
+  | 'void';
 
 export type InvoiceLineSource = 'item' | 'vendor' | 'transport' | 'custom';
 

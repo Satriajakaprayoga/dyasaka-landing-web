@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import type { ItemType } from '@/lib/types';
 
-const itemTypes: ItemType[] = ['consumable', 'rentable'];
+const itemTypes: ItemType[] = ['consumable', 'rentable', 'service'];
 
 export async function POST(req: NextRequest) {
   const supabase = createServerSupabase();
@@ -15,8 +15,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { item_category, name, type, pieces_per_unit, quantity_owned } =
-    await req.json();
+  const {
+    item_category,
+    name,
+    type,
+    pieces_per_unit,
+    quantity_owned,
+    vendor_id,
+  } = await req.json();
 
   if (!item_category || !name || !itemTypes.includes(type)) {
     return NextResponse.json(
@@ -33,6 +39,7 @@ export async function POST(req: NextRequest) {
       type,
       pieces_per_unit: pieces_per_unit ?? null,
       quantity_owned: type === 'rentable' ? (quantity_owned ?? 0) : 0,
+      vendor_id: vendor_id ? vendor_id : null,
     })
     .select()
     .single();
@@ -76,6 +83,8 @@ export async function PATCH(req: NextRequest) {
     patch.pieces_per_unit = body.pieces_per_unit;
   if (body.quantity_owned !== undefined)
     patch.quantity_owned = body.quantity_owned;
+  if (body.vendor_id !== undefined)
+    patch.vendor_id = body.vendor_id ? body.vendor_id : null;
 
   const { data, error } = await supabase
     .from('items')

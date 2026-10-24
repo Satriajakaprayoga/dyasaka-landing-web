@@ -63,7 +63,7 @@ not a single physical thing.
 ### `bookings`
 
 A recorded event booking. This is the central table that most new tables
-attach to (`booking_items`, `booking_vendors`, `checklist_items`,
+attach to (`booking_items`, `checklist_items`,
 `stock_movements`). Existing fields:
 
 - `id` (PK)
@@ -300,64 +300,56 @@ Fields:
 
 ---
 
-## 5. New tables — vendors (external services)
+## 5. Vendors (external partners) — implemented design
 
-Vendors are people/businesses coordinated for an event (clown, photographer,
-MC, catering) rather than inventory owned by the business. They have no stock
-concept and no fixed `quantity_owned` — availability is a date-collision
-warning, not a hard capacity number.
+Vendors are people/businesses the business coordinates with (photographer,
+clown, MC, rented-property owners). The implemented design (supersedes the
+earlier `vendors` + `vendor_services` + `booking_vendors` sketch, which was
+never built):
+
+- **The relation is vendor → items, NOT vendor → products.** Products are
+  the business's own packages assembled from goods (possibly sourced from
+  several vendors) — they never belong to one vendor.
+- **Services are items with `type = 'service'`** — photographer, clown, etc.
+  are ordinary `items` rows reusing variants for pricing and the existing
+  pickers; no separate services table. The rental lifecycle
+  (`quantity_owned`, checkout/return, `rental_status`) stays unused for
+  service items.
+- **One vendor per item** (`items.vendor_id`, nullable). The same service
+  offered by two vendors = two item rows — accepted at this scale.
 
 ### `vendors`
 
-Master record for an external service provider.
+Admin-only master record (`vendors` migration, 20261024100000). RLS:
+enable + a single `admin all` policy `to authenticated` — deliberately no
+anon/public policy, vendors are internal supplier data and never appear on
+customer-facing invoices (invoice lines show only the description).
 
 - `id` (PK)
-- `name` — e.g. "Badut Kecil Ceria"
-- `vendor_category` — plain string (e.g. "Clown", "Photographer", "Catering"),
-  same reasoning as `items.item_category`: a separate, free-text taxonomy, not
-  tied to the `categories` or `item_category` lists
-- `phone`
-- `address` — nullable
-- `social_media` — nullable, plain string (e.g. "IG: @badutceria"); kept as a
-  single text field rather than a structured table for now
-- `notes` — nullable, free text
-- `created_at`, `updated_at`
+- `name` — not null (e.g. "RW Photograph")
+- `phone` — nullable
+- `note` — nullable, free text (e.g. "DP 50%")
+- `is_active` — not null, default true; inactive vendors stay selectable
+  in the item form (suffixed "(nonaktif)") so existing links remain visible
+- `created_at`, `updated_at` — `updated_at` maintained by the shared
+  `set_updated_at()` trigger
 
-### `vendor_services`
+### Changes to `items`
 
-Optional predefined offerings for a vendor (a vendor can still be booked
-without one — see `booking_vendors.vendor_service_id` being nullable).
+- `vendor_id` — nullable FK → vendors, `on delete set null` + index:
+  deleting a vendor keeps its items working as unassigned (house) items.
+- `type` check widened to `('consumable', 'rentable', 'service')`.
+- Checklist generation updated: `generate_booking_checklist()` gives
+  service items a `stock_check` row only (reads as "book the vendor") —
+  no `pickup` row (nothing physical to load; consumable + rentable keep
+  theirs), and `return` stays rentable-only.
 
-- `id` (PK)
-- `vendor_id` (FK → vendors)
-- `name` — e.g. "2-hour clown performance"
-- `description` — nullable
-- `price` — reference price only; not locked, see `agreed_price` below
-- `created_at`, `updated_at`
+### Vendor lines on invoices
 
-### `booking_vendors`
-
-A vendor booked for a specific event. Supports both a predefined service and
-a fully custom/negotiated booking.
-
-- `id` (PK)
-- `booking_id` (FK → bookings)
-- `vendor_id` (FK → vendors)
-- `vendor_service_id` — nullable FK → vendor_services
-- `agreed_price` — snapshot of the actually negotiated price for this
-  booking; independent of `vendor_services.price`, same "freeze the price"
-  pattern as `booking_items.unit_price`
-- `status` — one of: `pending`, `confirmed`, `cancelled`
-- `note` — nullable, e.g. special requests for this event
-- `created_at`, `updated_at`
-
-**Double-booking check (warning only, not enforced):** when adding a vendor to
-a booking, check whether the same `vendor_id` already has another
-`booking_vendors` row with `status = confirmed` on the same `event_date`
-(joining through `bookings`). If so, show a warning to the admin — this does
-not block the action, since the admin may have information the system
-doesn't (e.g. the vendor can actually cover both events). This mirrors the
-non-enforced nature of `date_capacity` and transportation fee entry.
+Invoice lines carry `source_type`; a line added from the invoice draft's
+catalog picker whose item has a vendor is stored as `'vendor'`, house
+items as `'item'` (package line `'custom'`, transport `'transport'`).
+The description is all the customer ever sees.
 
 ---
 
@@ -429,10 +421,10 @@ and an invoice must show the right one.
 
 ## 9. Invoices
 
-An invoice is a record that must not change after it is issued. For that
-reason it stores its own copy of everything it shows, rather than reading
+An invoice stores its own copy of everything it shows, rather than reading
 live from bookings, items, or company settings. This is the same "freeze the
-price" principle as `booking_items.unit_price`.
+price" principle as `booking_items.unit_price`. Snapshots are frozen, but the
+invoice itself is **editable until it is paid** (see the decision below).
 
 ### `invoices`
 
@@ -441,7 +433,9 @@ price" principle as `booking_items.unit_price`.
 - `invoice_number` — unique, human-readable
 - `access_token` — unique, long and unguessable; this is what the customer's
   link contains, never the booking id or invoice id
-- `status` — one of: `draft`, `issued`, `paid`, `void`
+- `status` — one of: `draft`, `issued`, `partially_paid`, `paid`, `void`.
+  `partially_paid` is system-derived — the API recomputes it on every write
+  (`amount_paid > 0` and `balance_due > 0`) and never accepts it from clients
 - `issue_date`
 - `due_date` — nullable
 - `subtotal`
@@ -483,15 +477,30 @@ the transport fee, or be typed freely by the admin.
   invoice.
 - The PDF is generated on demand from the stored invoice data. PDF files are
   not stored.
-- An invoice in `draft` status is never visible through the public link.
-  Voiding an invoice keeps the row and changes its status; nothing is deleted.
+- Invoices in `draft` or `void` status are never visible through the public
+  link. Voiding an invoice keeps the row and changes its status; nothing is
+  deleted.
 
-**Decision (recorded):** one invoice per booking. `booking_id` is a UNIQUE
-foreign key (`on delete cascade`), so a booking cannot grow a second invoice;
-the down payment is recorded as a payment against that single invoice
-(`amount_paid` / `balance_due`), not as a separate DP invoice. Voided rows are
-kept and their numbers are never reused — the invoice number sequence counts
-every invoice issued in the month, regardless of later status.
+**Decision (recorded):** one invoice per booking, in an editable-until-paid
+model. `booking_id` is a UNIQUE foreign key (`on delete cascade`), so a
+booking cannot grow a second invoice; the down payment is recorded as a
+payment against that single invoice (`amount_paid` / `balance_due`), not as a
+separate DP invoice.
+
+- `draft`, `issued` and `partially_paid` are fully editable: lines, due date,
+  notes and bank account can be corrected at any time; totals recompute and
+  the status re-derives from the payment math on every save (settled → `paid`,
+  money in → `partially_paid`, nothing in → `issued`). Editing the bank
+  account after issue re-snapshots `bank_account_snapshot`.
+- `paid` is strictly read-only — no void, no payment reversal (accepted
+  trade-off: a wrongly recorded final payment can only be fixed by direct DB
+  edit). `void` is read-only too, reachable only from `issued` /
+  `partially_paid`.
+- Deleting is draft-only: issued invoices keep their `access_token` links
+  alive, so void — not delete — is the correction path after issue. Voided
+  rows are kept and their numbers are never reused — the invoice number
+  sequence counts every invoice issued in the month, regardless of later
+  status.
 
 ---
 
@@ -623,11 +632,13 @@ it) or restock in bulk from reorder points. The schema supports both because
 - The existing `date_capacity` table and its trigger-based recalculation stay
   unchanged — it remains a separate, business-wide daily capacity check that
   sits alongside (not replacing) per-item rentable availability.
-- Vendor double-booking is a warning shown to the admin, never a hard block —
-  the admin always has final say.
-- `vendor_category` and `item_category` are both plain strings, intentionally
-  independent of each other and of `products.category_id`. Do not merge these
-  into a shared `categories` table.
+- The vendor relation is vendor → items (`items.vendor_id`), never
+  vendor → products, and one vendor per item — the same service from two
+  vendors is two item rows. Vendors are admin-only data: no anon RLS
+  policy, and invoice lines expose only the description, never the vendor.
+- `item_category` is a plain string, intentionally independent of
+  `products.category_id`. Do not merge them into a shared `categories`
+  table.
 - `transport_fee` is always admin-entered per booking; do not build automatic
   distance/zone-based calculation for this phase.
 - Invoices are frozen records: line items, totals, company name and bank
@@ -640,5 +651,5 @@ it) or restock in bulk from reorder points. The schema supports both because
   later; bookings made before the field existed stay empty.
 - Procurement never edits stock directly. Receiving goods always goes through
   `stock_movements`.
-- Suppliers (goods you buy) and vendors (services you book for an event) are
-  separate tables and separate admin screens.
+- Suppliers (goods you buy) and vendors (services/property you source for an
+  event) are separate tables and separate admin screens.

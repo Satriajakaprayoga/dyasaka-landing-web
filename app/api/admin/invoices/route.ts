@@ -6,6 +6,11 @@ import type { InvoiceLineSource } from '@/lib/types';
  * Admin-only invoice state machine (§9). One invoice per booking
  * (booking_id UNIQUE): the DP is recorded as a payment against it.
  *
+ * Editable-until-paid model: draft/issued/partially_paid are fully
+ * editable; `partially_paid` is derived from the payment math on
+ * every write, never sent by clients; paid/void are read-only
+ * (paid strictly — no void, no reversal).
+ *
  * POST   { booking_id }                    → create draft (prefilled)
  * PATCH  { id, action, … }                 → action dispatch:
  *          save-lines | issue | record-payment | void
@@ -74,22 +79,6 @@ function parseLines(raw: unknown): { lines: {
   return { lines };
 }
 
-async function recomputeTotals(
-  supabase: ReturnType<typeof createServerSupabase>,
-  invoiceId: string,
-) {
-  const { data: items } = await supabase
-    .from('invoice_items')
-    .select('line_total')
-    .eq('invoice_id', invoiceId);
-
-  const subtotal = (items ?? []).reduce(
-    (sum, r) => sum + Number(r.line_total),
-    0,
-  );
-  return subtotal;
-}
-
 export async function POST(req: NextRequest) {
   const supabase = createServerSupabase();
 
@@ -108,7 +97,7 @@ export async function POST(req: NextRequest) {
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, status, transport_fee')
+    .select('id, status, transport_fee, product_id, products(name, price)')
     .eq('id', booking_id)
     .maybeSingle();
 
@@ -135,11 +124,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Prefill lines from the booking's item snapshot — copies, so later
-  // product/variant changes never touch an existing invoice.
+  // Child→parent embed comes back as an object, not an array; null
+  // product = custom booking without a package.
+  const { product_id, products: pkg } = booking as unknown as {
+    product_id: string | null;
+    products: { name: string; price: number } | null;
+  };
+
+  // Prefill lines from the booking's item snapshot, priced at the
+  // CURRENT catalog price (falling back to the booking's frozen price
+  // when the variant is gone). Copies either way — later catalog
+  // changes never touch an existing invoice.
   const { data: bookingItems } = await supabase
     .from('booking_items')
-    .select('quantity, unit_price, item_variants(color, size, items(name))')
+    .select(
+      'quantity, unit_price, item_variants(color, size, current_price, items(name))',
+    )
     .eq('booking_id', booking_id)
     .order('id');
 
@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
     item_variants: {
       color: string | null;
       size: string | null;
+      current_price: number | null;
       items: { name: string } | null;
     } | null;
   }[];
@@ -159,14 +160,32 @@ export async function POST(req: NextRequest) {
     unit_price: number;
     source_type: InvoiceLineSource;
     sort_order: number;
-  }[] = rows.map((r, i) => ({
-    description: describeVariant(r.item_variants),
-    quantity: r.quantity,
-    unit_price: Number(r.unit_price),
-    source_type: 'item',
-    sort_order: i * 10,
-  }));
+  }[] = [];
 
+  // 1) The package itself, first on the bill.
+  if (product_id && pkg) {
+    lines.push({
+      description: pkg.name,
+      quantity: 1,
+      unit_price: Number(pkg.price),
+      source_type: 'custom',
+      sort_order: 0,
+    });
+  }
+
+  // 2) Item lines at live catalog prices.
+  rows.forEach((r, i) => {
+    const livePrice = r.item_variants?.current_price;
+    lines.push({
+      description: describeVariant(r.item_variants),
+      quantity: r.quantity,
+      unit_price: livePrice != null ? Number(livePrice) : Number(r.unit_price),
+      source_type: 'item',
+      sort_order: (i + 1) * 10,
+    });
+  });
+
+  // 3) Transport last.
   if (booking.transport_fee != null && Number(booking.transport_fee) > 0) {
     lines.push({
       description: 'Biaya Transport',
@@ -231,11 +250,14 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invoice tidak ditemukan' }, { status: 404 });
   }
 
-  // ---------- save-lines (draft only) ----------
+  // ---------- save-lines (editable: draft | issued | partially_paid) ----------
   if (action === 'save-lines') {
-    if (invoice.status !== 'draft') {
+    const isDraftInvoice = invoice.status === 'draft';
+
+    if (!isDraftInvoice && invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+      // paid / void are read-only, strictly.
       return NextResponse.json(
-        { error: 'Hanya draft yang dapat diubah' },
+        { error: 'Invoice lunas atau dibatalkan tidak dapat diubah' },
         { status: 409 },
       );
     }
@@ -250,8 +272,72 @@ export async function PATCH(req: NextRequest) {
     const notes = body.notes ? body.notes : null;
     const bank_account_id = body.bank_account_id ? body.bank_account_id : null;
 
-    // Replace-all: drafts are editable scratch space, so rewriting the
-    // whole line set is simpler than diffing.
+    const amountPaid = Number(invoice.amount_paid);
+
+    // Issued invoices keep an active bank account — the customer
+    // needs somewhere to pay.
+    let bank_account_snapshot = invoice.bank_account_snapshot;
+    if (!isDraftInvoice) {
+      if (parsed.lines.length === 0) {
+        return NextResponse.json(
+          { error: 'Invoice terbit minimal harus memiliki satu baris' },
+          { status: 400 },
+        );
+      }
+      if (!bank_account_id) {
+        return NextResponse.json(
+          { error: 'Pilih rekening bank terlebih dahulu' },
+          { status: 400 },
+        );
+      }
+      // Re-snapshot only when the account actually changed — an
+      // unchanged id keeps its issued-time snapshot even if the bank
+      // was later deactivated.
+      if (bank_account_id !== invoice.bank_account_id || !bank_account_snapshot) {
+        const { data: bank } = await supabase
+          .from('company_bank_accounts')
+          .select('bank_name, account_holder, account_number, is_active')
+          .eq('id', bank_account_id)
+          .maybeSingle();
+
+        if (!bank || !bank.is_active) {
+          return NextResponse.json(
+            { error: 'Pilih rekening bank yang aktif' },
+            { status: 400 },
+          );
+        }
+        bank_account_snapshot = `${bank.bank_name} a/n ${bank.account_holder} • ${bank.account_number}`;
+      }
+    }
+
+    const subtotal = parsed.lines.reduce(
+      (s, l) => s + l.quantity * l.unit_price,
+      0,
+    );
+    const balanceDue = subtotal - amountPaid;
+
+    if (balanceDue < 0) {
+      return NextResponse.json(
+        {
+          error: `Total baru lebih kecil dari pembayaran tercatat (${amountPaid}) — kurangi pembayaran terlebih dahulu`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // partially_paid is derived, never stored by hand: settled → paid,
+    // some money in → partially_paid, nothing in → issued. Drafts keep
+    // their status until issued.
+    const nextStatus = isDraftInvoice
+      ? 'draft'
+      : amountPaid > 0 && balanceDue <= 0
+        ? 'paid'
+        : amountPaid > 0
+          ? 'partially_paid'
+          : 'issued';
+
+    // Replace-all: rewriting the whole line set is simpler than
+    // diffing, at any status.
     const { error: delError } = await supabase
       .from('invoice_items')
       .delete()
@@ -271,17 +357,17 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    const subtotal = await recomputeTotals(supabase, invoice.id);
-
     const { data: updated, error: updError } = await supabase
       .from('invoices')
       .update({
+        status: nextStatus,
         due_date,
         notes,
         bank_account_id,
+        bank_account_snapshot,
         subtotal,
         total: subtotal,
-        balance_due: subtotal - Number(invoice.amount_paid),
+        balance_due: balanceDue,
       })
       .eq('id', invoice.id)
       .select()
@@ -417,9 +503,9 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  // ---------- record-payment (issued only) ----------
+  // ---------- record-payment (issued | partially_paid) ----------
   if (action === 'record-payment') {
-    if (invoice.status !== 'issued') {
+    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
       return NextResponse.json(
         { error: 'Pembayaran hanya dicatat pada invoice yang terbit' },
         { status: 409 },
@@ -438,12 +524,14 @@ export async function PATCH(req: NextRequest) {
     const amountPaid = Number(invoice.amount_paid) + amount;
     const newBalance = Number(invoice.total) - amountPaid;
 
+    // Settled → paid (read-only from here); anything else with money
+    // in → partially_paid.
     const { data: updated, error } = await supabase
       .from('invoices')
       .update({
         amount_paid: amountPaid,
         balance_due: newBalance,
-        status: newBalance <= 0 ? 'paid' : 'issued',
+        status: newBalance <= 0 ? 'paid' : 'partially_paid',
       })
       .eq('id', invoice.id)
       .select()
@@ -456,11 +544,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ invoice: updated });
   }
 
-  // ---------- void (issued only) ----------
+  // ---------- void (issued | partially_paid — never paid, never draft) ----------
   if (action === 'void') {
-    if (invoice.status !== 'issued') {
+    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
       return NextResponse.json(
-        { error: 'Hanya invoice berstatus terbit yang dapat dibatalkan' },
+        { error: 'Hanya invoice terbit atau bayar sebagian yang dapat dibatalkan' },
         { status: 409 },
       );
     }

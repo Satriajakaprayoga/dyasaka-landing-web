@@ -242,6 +242,7 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
             <option value="all">Semua Tipe</option>
             <option value="consumable">Habis Pakai</option>
             <option value="rentable">Sewa</option>
+            <option value="service">Jasa</option>
           </select>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -308,8 +309,20 @@ export default function ItemsTable({ rows }: { rows: Row[] }) {
                       {item.item_category}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={item.type === "rentable" ? "amber" : "blue"}>
-                        {item.type === "rentable" ? "Sewa" : "Habis Pakai"}
+                      <Badge
+                        tone={
+                          item.type === "rentable"
+                            ? "amber"
+                            : item.type === "service"
+                              ? "purple"
+                              : "blue"
+                        }
+                      >
+                        {item.type === "rentable"
+                          ? "Sewa"
+                          : item.type === "service"
+                            ? "Jasa"
+                            : "Habis Pakai"}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
