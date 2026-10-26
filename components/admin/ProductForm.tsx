@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { Category, Product, ProductImage } from "@/lib/types";
+import type { Category, Product, ProductImage, Vendor } from "@/lib/types";
 import {
   Card,
   btnPrimary,
@@ -137,10 +137,11 @@ function ExistingImage({
 
 type Props = {
   categories: Category[];
+  vendors: Vendor[];
   product?: Product & { product_images?: ProductImage[] };
 };
 
-export default function ProductForm({ categories, product }: Props) {
+export default function ProductForm({ categories, vendors, product }: Props) {
   const router = useRouter();
   const isEdit = Boolean(product);
 
@@ -149,6 +150,9 @@ export default function ProductForm({ categories, product }: Props) {
     name: product?.name ?? "",
     description: product?.description ?? "",
     price: product ? String(product.price) : "",
+    vendor_id: product?.vendor_id ?? "",
+    vendor_price:
+      product?.vendor_price != null ? String(product.vendor_price) : "",
     is_active: product ? String(product.is_active) : "true",
   });
   const [existingImages, setExistingImages] = useState<ProductImage[]>(
@@ -255,6 +259,17 @@ export default function ProductForm({ categories, product }: Props) {
     }
   }
 
+  // Margin is always computed, never stored: selling price vs vendor price.
+  const priceNum = Number(form.price);
+  const vendorPriceNum = Number(form.vendor_price);
+  const showMargin =
+    form.price !== "" &&
+    form.vendor_price !== "" &&
+    Number.isFinite(priceNum) &&
+    Number.isFinite(vendorPriceNum);
+  const margin = priceNum - vendorPriceNum;
+  const marginPct = priceNum > 0 ? (margin / priceNum) * 100 : 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -265,6 +280,8 @@ export default function ProductForm({ categories, product }: Props) {
       name: form.name,
       description: form.description,
       price: Number(form.price),
+      vendor_id: form.vendor_id,
+      vendor_price: form.vendor_price === "" ? null : Number(form.vendor_price),
       ...(isEdit ? { is_active: form.is_active === "true" } : {}),
     };
 
@@ -402,6 +419,48 @@ export default function ProductForm({ categories, product }: Props) {
               </select>
             </div>
           )}
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Vendor (opsional)</label>
+            <select
+              value={form.vendor_id}
+              onChange={(e) => update("vendor_id", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Tanpa vendor</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                  {v.is_active ? "" : " (nonaktif)"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Harga Vendor (Rp)</label>
+            <input
+              type="number"
+              min={0}
+              value={form.vendor_price}
+              onChange={(e) => update("vendor_price", e.target.value)}
+              placeholder="Harga beli dari vendor"
+              className={inputClass}
+            />
+            {showMargin && (
+              <p
+                className={
+                  margin < 0
+                    ? "mt-1 text-xs font-medium text-red-600"
+                    : "mt-1 text-xs text-gray-500"
+                }
+              >
+                Margin: Rp {margin.toLocaleString("id-ID")} (
+                {marginPct.toFixed(0)}%)
+              </p>
+            )}
+          </div>
         </div>
 
         <div>

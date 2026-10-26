@@ -15,6 +15,10 @@ Manage the product catalog: scan, filter, edit, delete.
 
 - `products` + `categories(name)` + `product_images(image_url, sort_order)`, ordered `created_at desc`.
 
+## Vendor price & margin
+
+The Harga cell also shows the cost basis when the product has one: `vendor Rp X · margin Rp Y` as a muted sub-line (`vendor_price` set on the product; margin = `price − vendor_price`, computed, never stored). Vendor columns are admin-only — the anon column grants in 20261025100000 exclude them from public reads.
+
 ## Search & filters (client-side, in `ProductsTable`)
 
 | Control | Filters on |

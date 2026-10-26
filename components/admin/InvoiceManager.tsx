@@ -9,6 +9,8 @@ import type {
   Invoice,
   InvoiceItem,
   InvoiceLineSource,
+  Product,
+  Vendor,
 } from "@/lib/types";
 import {
   Card,
@@ -24,6 +26,12 @@ import ConfirmModal from "./ConfirmModal";
 import type { BookingCatalogItem } from "./BookingItemsPanel";
 
 type BookingRef = Pick<Booking, "id" | "customer_name" | "phone" | "event_date">;
+
+// Active product tagged with a vendor — feeds the picker's Vendor group.
+export type VendorProductRef = Pick<
+  Product,
+  "id" | "name" | "price" | "vendor_id"
+> & { vendors: Pick<Vendor, "name"> };
 
 function variantTitle(
   itemName: string | undefined,
@@ -56,6 +64,7 @@ type Props = {
   initialItems: InvoiceItem[];
   bankAccounts: CompanyBankAccount[];
   catalog: BookingCatalogItem[];
+  vendorProducts: VendorProductRef[];
   companyName: string | null;
   logoUrl: string | null;
 };
@@ -66,6 +75,7 @@ export default function InvoiceManager({
   initialItems,
   bankAccounts,
   catalog,
+  vendorProducts,
   companyName,
   logoUrl,
 }: Props) {
@@ -158,7 +168,7 @@ export default function InvoiceManager({
 
   // ---------- Catalog picker (same grouping as BookingItemsPanel) ----------
 
-  const [pickerVariantId, setPickerVariantId] = useState("");
+  const [pickerId, setPickerId] = useState("");
 
   const variantById = useMemo(
     () =>
@@ -185,11 +195,43 @@ export default function InvoiceManager({
     return [...groups.entries()];
   }, [catalog]);
 
-  function addFromCatalog(id: string) {
-    setPickerVariantId("");
+  const vendorProductById = useMemo(
+    () => new Map(vendorProducts.map((p) => [p.id, p])),
+    [vendorProducts],
+  );
+
+  const pickerVendorGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; label: string }[]>();
+    for (const p of vendorProducts) {
+      const vendorName = p.vendors?.name ?? "Vendor";
+      const list = groups.get(vendorName) ?? [];
+      list.push({
+        id: p.id,
+        label: `${p.name} — ${formatRupiah(Number(p.price))}`,
+      });
+      groups.set(vendorName, list);
+    }
+    return [...groups.entries()];
+  }, [vendorProducts]);
+
+  function addFromPicker(id: string) {
+    setPickerId("");
+    // Vendor products come in at their selling price — admin adjusts.
+    const vendorProduct = vendorProductById.get(id);
+    if (vendorProduct) {
+      setLines((prev) => [
+        ...prev,
+        {
+          description: vendorProduct.name,
+          quantity: "1",
+          unit_price: String(vendorProduct.price),
+          source_type: "vendor" as const,
+        },
+      ]);
+      return;
+    }
     const found = variantById.get(id);
     if (!found) return;
-    // Vendor-owned items bill as vendor lines; house items as item lines.
     setLines((prev) => [
       ...prev,
       {
@@ -200,7 +242,7 @@ export default function InvoiceManager({
         ),
         quantity: "1",
         unit_price: String(found.variant.current_price),
-        source_type: found.item.vendor_id ? "vendor" : "item",
+        source_type: "item" as const,
       },
     ]);
   }
@@ -430,8 +472,8 @@ export default function InvoiceManager({
             </button>
             <select
               aria-label="Tambah dari katalog"
-              value={pickerVariantId}
-              onChange={(e) => addFromCatalog(e.target.value)}
+              value={pickerId}
+              onChange={(e) => addFromPicker(e.target.value)}
               disabled={busy}
               className={inputClass + " w-72"}
             >
@@ -441,6 +483,15 @@ export default function InvoiceManager({
                   {variants.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+              {pickerVendorGroups.map(([vendorName, products]) => (
+                <optgroup key={vendorName} label={vendorName}>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
                     </option>
                   ))}
                 </optgroup>

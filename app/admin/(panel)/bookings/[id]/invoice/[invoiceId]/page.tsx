@@ -6,7 +6,9 @@ import type {
   Invoice,
   InvoiceItem,
 } from "@/lib/types";
-import InvoiceManager from "@/components/admin/InvoiceManager";
+import InvoiceManager, {
+  type VendorProductRef,
+} from "@/components/admin/InvoiceManager";
 import type { BookingCatalogItem } from "@/components/admin/BookingItemsPanel";
 import { BackLink, Breadcrumbs, InvoiceStatusBadge } from "@/components/admin/ui";
 
@@ -22,36 +24,49 @@ export default async function InvoiceManagerPage({
 }) {
   const supabase = createServerSupabase();
 
-  const [bookingRes, invoiceRes, itemsRes, banksRes, profileRes, catalogRes] =
-    await Promise.all([
-      supabase
-        .from("bookings")
-        .select("id, customer_name, phone, status, event_date")
-        .eq("id", params.id)
-        .maybeSingle(),
-      supabase.from("invoices").select("*").eq("id", params.invoiceId).single(),
-      supabase
-        .from("invoice_items")
-        .select("*")
-        .eq("invoice_id", params.invoiceId)
-        .order("sort_order"),
-      supabase
-        .from("company_bank_accounts")
-        .select("*")
-        .eq("is_active", true)
-        .order("sort_order"),
-      supabase
-        .from("company_profile")
-        .select("company_name, logo_url")
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("items")
-        .select(
-          "id, name, item_category, type, quantity_owned, vendor_id, item_variants(id, color, size, current_price)",
-        )
-        .order("name"),
-    ]);
+  const [
+    bookingRes,
+    invoiceRes,
+    itemsRes,
+    banksRes,
+    profileRes,
+    catalogRes,
+    vendorProductsRes,
+  ] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("id, customer_name, phone, status, event_date")
+      .eq("id", params.id)
+      .maybeSingle(),
+    supabase.from("invoices").select("*").eq("id", params.invoiceId).single(),
+    supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", params.invoiceId)
+      .order("sort_order"),
+    supabase
+      .from("company_bank_accounts")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("company_profile")
+      .select("company_name, logo_url")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("items")
+      .select(
+        "id, name, item_category, type, quantity_owned, item_variants(id, color, size, current_price)",
+      )
+      .order("name"),
+    supabase
+      .from("products")
+      .select("id, name, price, vendor_id, vendors(name)")
+      .not("vendor_id", "is", null)
+      .eq("is_active", true)
+      .order("name"),
+  ]);
 
   const booking = (bookingRes.data ?? null) as BookingRef | null;
   const invoice = (invoiceRes.data ?? null) as Invoice | null;
@@ -64,6 +79,8 @@ export default async function InvoiceManagerPage({
   const items = (itemsRes.data ?? []) as InvoiceItem[];
   const banks = (banksRes.data ?? []) as CompanyBankAccount[];
   const catalog = (catalogRes.data ?? []) as unknown as BookingCatalogItem[];
+  const vendorProducts = (vendorProductsRes.data ??
+    []) as unknown as VendorProductRef[];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -92,6 +109,7 @@ export default async function InvoiceManagerPage({
         initialItems={items}
         bankAccounts={banks}
         catalog={catalog}
+        vendorProducts={vendorProducts}
         companyName={profileRes.data?.company_name ?? null}
         logoUrl={profileRes.data?.logo_url ?? null}
       />

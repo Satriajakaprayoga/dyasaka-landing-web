@@ -13,12 +13,13 @@ Edit product master data, manage its photos, and maintain the package recipe ("I
 
 ## Data
 
-- `products` + `product_images(*)` + `product_items(id, product_id, item_variant_id, quantity, item_variants(color, size, current_price, items(name)))` where `id = [id]` (`.single()`); plus `categories` and the variant catalog `items(id, name, item_category, type, quantity_owned, item_variants(id, color, size, current_price))` ordered by name — fetched in parallel. Embed rows are cast (`as unknown as`) because child→parent embeds return objects.
+- `products` + `product_images(*)` + `product_items(id, product_id, item_variant_id, quantity, item_variants(color, size, current_price, items(name)))` where `id = [id]` (`.single()`); plus `categories`, `vendors` (ordered by name), and the variant catalog `items(id, name, item_category, type, quantity_owned, item_variants(id, color, size, current_price))` — fetched in parallel. Embed rows are cast (`as unknown as`) because child→parent embeds return objects.
 - Unknown id → `notFound()`.
 
 ## Form (`ProductForm`, edit mode)
 
 - Same fields as create, prefilled; adds **is_active** select (Aktif/Nonaktif — inactive products disappear from the public catalog).
+- Vendor select + **Harga Vendor** + live margin hint: same behavior as [products-new.md](products-new.md).
 - Existing photos: rendered by `ExistingImage` with delete + reorder (`sort_order`). On save, remaining photos are renumbered to contiguous `0..n-1` before new uploads append after them (no `sort_order` collisions).
 - Photo validation, compression, and error handling: same pipeline as [products-new.md](products-new.md) — failed files stay selected on the form for retry, and removed photos are deleted from Storage.
 - Submits `PATCH /api/admin/products` with `{ id, …changes }`.

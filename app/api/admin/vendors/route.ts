@@ -123,8 +123,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Missing vendor id' }, { status: 400 });
   }
 
-  // items.vendor_id is ON DELETE SET NULL: deletion always succeeds;
-  // orphaned items keep working as unassigned (house) items.
+  // products.vendor_id is ON DELETE SET NULL — deletion always succeeds,
+  // linked products just lose their vendor.
   const { error } = await supabase.from('vendors').delete().eq('id', id);
 
   if (error) {

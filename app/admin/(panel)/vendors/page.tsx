@@ -18,8 +18,6 @@ import { PencilIcon, PlusIcon, UsersIcon, TrashIcon } from "@/components/admin/i
 import Pagination from "@/components/admin/Pagination";
 import ConfirmModal from "@/components/admin/ConfirmModal";
 
-type VendorRow = Vendor & { item_count: number };
-
 type EditState = {
   name: string;
   phone: string;
@@ -31,7 +29,7 @@ const emptyEdit: EditState = { name: "", phone: "", note: "", is_active: true };
 
 export default function VendorsPage() {
   const router = useRouter();
-  const [vendors, setVendors] = useState<VendorRow[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [form, setForm] = useState<EditState>(emptyEdit);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +38,7 @@ export default function VendorsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<EditState>(emptyEdit);
   const [page, setPage] = useState(1);
-  const [confirmRow, setConfirmRow] = useState<VendorRow | null>(null);
+  const [confirmRow, setConfirmRow] = useState<Vendor | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const PAGE_SIZE = 8;
@@ -52,25 +50,8 @@ export default function VendorsPage() {
   );
 
   async function loadVendors() {
-    const [vendorsRes, itemsRes] = await Promise.all([
-      supabase.from("vendors").select("*").order("name"),
-      supabase
-        .from("items")
-        .select("vendor_id")
-        .not("vendor_id", "is", null),
-    ]);
-
-    const counts = new Map<string, number>();
-    for (const r of (itemsRes.data ?? []) as { vendor_id: string }[]) {
-      counts.set(r.vendor_id, (counts.get(r.vendor_id) ?? 0) + 1);
-    }
-
-    setVendors(
-      ((vendorsRes.data ?? []) as Vendor[]).map((v) => ({
-        ...v,
-        item_count: counts.get(v.id) ?? 0,
-      })),
-    );
+    const { data } = await supabase.from("vendors").select("*").order("name");
+    setVendors((data ?? []) as Vendor[]);
     setInitialLoading(false);
   }
 
@@ -118,7 +99,7 @@ export default function VendorsPage() {
     loadVendors();
   }
 
-  function startEdit(v: VendorRow) {
+  function startEdit(v: Vendor) {
     setEditingId(v.id);
     setEdit({
       name: v.name,
@@ -362,9 +343,7 @@ export default function VendorsPage() {
                             {!v.is_active && <Badge tone="gray">Nonaktif</Badge>}
                           </div>
                           <p className="truncate text-xs text-gray-400">
-                            {[v.phone, `${v.item_count} item`, v.note]
-                              .filter(Boolean)
-                              .join(" · ")}
+                            {[v.phone, v.note].filter(Boolean).join(" · ")}
                           </p>
                         </div>
                       </div>
@@ -418,16 +397,10 @@ export default function VendorsPage() {
         onConfirm={performDelete}
         onClose={closeConfirm}
       >
-        {confirmRow && confirmRow.item_count > 0 ? (
-          <p className="text-gray-600">
-            {confirmRow.item_count} item tetap ada tapi menjadi tanpa vendor
-            (bisa di-assign ke vendor lain kapan saja).
-          </p>
-        ) : (
-          <p className="text-gray-600">
-            Tidak ada item yang terhubung — aman untuk dihapus.
-          </p>
-        )}
+        <p className="text-gray-600">
+          Produk yang terhubung akan lepas dari vendor ini (tidak ikut
+          terhapus). Tindakan ini tidak dapat dibatalkan.
+        </p>
       </ConfirmModal>
     </div>
   );

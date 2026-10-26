@@ -2,18 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Category } from "@/lib/types";
+import type { Category, Vendor } from "@/lib/types";
 import ProductForm from "@/components/admin/ProductForm";
 import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
 export default function NewProductPage() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
   useEffect(() => {
     supabase
       .from("categories")
       .select("*")
       .then(({ data }) => setCategories((data ?? []) as Category[]));
+    supabase
+      .from("vendors")
+      .select("*")
+      .order("name")
+      .then(({ data }) => setVendors((data ?? []) as Vendor[]));
   }, []);
 
   return (
@@ -37,7 +43,7 @@ export default function NewProductPage() {
         </p>
       </div>
 
-      <ProductForm categories={categories} />
+      <ProductForm categories={categories} vendors={vendors} />
     </div>
   );
 }

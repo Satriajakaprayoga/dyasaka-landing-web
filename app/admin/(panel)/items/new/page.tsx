@@ -9,9 +9,6 @@ export default function NewItemPage() {
   const [itemCategories, setItemCategories] = useState<
     { name: string; count: number }[]
   >([]);
-  const [vendors, setVendors] = useState<
-    { id: string; name: string; is_active: boolean }[]
-  >([]);
 
   useEffect(() => {
     supabase.from("items").select("item_category").then(({ data }) => {
@@ -26,12 +23,6 @@ export default function NewItemPage() {
           .sort((a, b) => a.name.localeCompare(b.name)),
       );
     });
-
-    supabase
-      .from("vendors")
-      .select("id, name, is_active")
-      .order("name")
-      .then(({ data }) => setVendors(data ?? []));
   }, []);
 
   return (
@@ -51,11 +42,11 @@ export default function NewItemPage() {
           Tambah Item
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Komponen dasar penyusun paket — habis pakai, sewa, atau jasa
+          Komponen dasar penyusun paket — habis pakai atau sewa
         </p>
       </div>
 
-      <ItemForm itemCategories={itemCategories} vendors={vendors} />
+      <ItemForm itemCategories={itemCategories} />
     </div>
   );
 }

@@ -10,12 +10,10 @@ export default async function EditItemPage({
 }) {
   const supabase = createServerSupabase();
 
-  const [{ data: item }, { data: allItems }, { data: vendors }] =
-    await Promise.all([
-      supabase.from("items").select("*").eq("id", params.id).single(),
-      supabase.from("items").select("item_category"),
-      supabase.from("vendors").select("id, name, is_active").order("name"),
-    ]);
+  const [{ data: item }, { data: allItems }] = await Promise.all([
+    supabase.from("items").select("*").eq("id", params.id).single(),
+    supabase.from("items").select("item_category"),
+  ]);
 
   if (!item) {
     notFound();
@@ -48,11 +46,7 @@ export default async function EditItemPage({
         <p className="mt-1 text-sm text-gray-500">{item.name}</p>
       </div>
 
-      <ItemForm
-        item={item}
-        itemCategories={itemCategories}
-        vendors={(vendors ?? []) as { id: string; name: string; is_active: boolean }[]}
-      />
+      <ItemForm item={item} itemCategories={itemCategories} />
     </div>
   );
 }

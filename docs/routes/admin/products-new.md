@@ -14,10 +14,12 @@ Create a product and upload its photos in one pass.
 ## Data
 
 - `categories` (browser client) for the category select.
+- `vendors` (browser client, ordered by name) for the vendor select.
 
 ## Form (`ProductForm`, create mode)
 
 - Name (required), category (select), price (number, Rp), description (textarea).
+- Vendor (optional select, "Tanpa vendor" default; inactive vendors suffixed "(nonaktif)") + **Harga Vendor** (cost, Rp). When both prices are filled a live hint shows the computed margin — `Margin: Rp X (Y%)` (red when negative); margin is never stored.
 - Photo picker: multi-select with previews via `FilePreview`; upload happens client-side to Supabase Storage bucket `product-images` after the product row is created.
 
 ### Photo pipeline (`ProductForm.uploadImage`)

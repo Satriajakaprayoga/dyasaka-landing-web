@@ -313,6 +313,16 @@ export default function ProductsTable({ rows }: { rows: Row[] }) {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-gray-900">
                       Rp {p.price.toLocaleString("id-ID")}
+                      {p.vendor_price != null && (
+                        <span className="block text-xs font-normal text-gray-400">
+                          vendor Rp{" "}
+                          {Number(p.vendor_price).toLocaleString("id-ID")} ·
+                          margin Rp{" "}
+                          {(
+                            p.price - Number(p.vendor_price)
+                          ).toLocaleString("id-ID")}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge tone={p.is_active ? "green" : "gray"}>

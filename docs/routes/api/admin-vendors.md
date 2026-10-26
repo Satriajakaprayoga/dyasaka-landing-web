@@ -6,8 +6,9 @@
 | **Source** | `app/api/admin/vendors/route.ts` |
 
 Vendors are internal supplier data (admin-only RLS — no anon policy on
-the table). They attach to items via `items.vendor_id`; deleting a
-vendor is never blocked because that FK is `ON DELETE SET NULL`.
+the table). Deleting a vendor is never blocked — `products.vendor_id`
+(20261025100000) is `ON DELETE SET NULL`, so linked products just lose
+their vendor reference.
 
 ## POST — create
 
@@ -24,5 +25,4 @@ without `id` or with an empty patch. → `{ vendor }`.
 
 ## DELETE — delete
 
-Query: `?id=` (400 when missing). Always succeeds — items keep working
-with `vendor_id` set to null. → `{ ok: true }`.
+Query: `?id=` (400 when missing). → `{ ok: true }`.
