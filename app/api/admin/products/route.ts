@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { category_id, name, description, price } = await req.json();
+  const { category_id, name, description, price, vendor_id, vendor_price } =
+    await req.json();
 
   if (!category_id || !name || !price) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -20,7 +21,17 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('products')
-    .insert({ category_id, name, description: description ?? null, price })
+    .insert({
+      category_id,
+      name,
+      description: description ?? null,
+      price,
+      vendor_id: vendor_id || null,
+      vendor_price:
+        vendor_price === '' || vendor_price == null
+          ? null
+          : Number(vendor_price),
+    })
     .select()
     .single();
 
@@ -43,7 +54,16 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, category_id, name, description, price, is_active } = body;
+  const {
+    id,
+    category_id,
+    name,
+    description,
+    price,
+    is_active,
+    vendor_id,
+    vendor_price,
+  } = body;
 
   if (!id) {
     return NextResponse.json({ error: 'Missing product id' }, { status: 400 });
@@ -55,6 +75,10 @@ export async function PATCH(req: NextRequest) {
   if (description !== undefined) updates.description = description;
   if (price !== undefined) updates.price = price;
   if (is_active !== undefined) updates.is_active = is_active;
+  if (vendor_id !== undefined) updates.vendor_id = vendor_id || null;
+  if (vendor_price !== undefined)
+    updates.vendor_price =
+      vendor_price === null || vendor_price === '' ? null : Number(vendor_price);
 
   const { data, error } = await supabase
     .from('products')

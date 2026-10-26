@@ -17,15 +17,8 @@ type CategorySuggestion = {
   count: number;
 };
 
-type VendorOption = {
-  id: string;
-  name: string;
-  is_active: boolean;
-};
-
 type Props = {
   itemCategories: CategorySuggestion[];
-  vendors: VendorOption[];
   item?: Item;
 };
 
@@ -39,11 +32,6 @@ const typeOptions: { value: ItemType; label: string; hint: string }[] = [
     value: "rentable",
     label: "Sewa",
     hint: "Dipinjam dan dikembalikan (stand, backdrop, dll.)",
-  },
-  {
-    value: "service",
-    label: "Jasa",
-    hint: "Jasa vendor eksternal (fotografer, badut) — tanpa stok & alur sewa",
   },
 ];
 
@@ -226,7 +214,7 @@ function CategoryCombobox({
   );
 }
 
-export default function ItemForm({ itemCategories, vendors, item }: Props) {
+export default function ItemForm({ itemCategories, item }: Props) {
   const router = useRouter();
   const isEdit = Boolean(item);
 
@@ -236,7 +224,6 @@ export default function ItemForm({ itemCategories, vendors, item }: Props) {
     type: (item?.type ?? "consumable") as ItemType,
     pieces_per_unit: item?.pieces_per_unit ? String(item.pieces_per_unit) : "",
     quantity_owned: item ? String(item.quantity_owned) : "0",
-    vendor_id: item?.vendor_id ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -256,7 +243,6 @@ export default function ItemForm({ itemCategories, vendors, item }: Props) {
       type: form.type,
       pieces_per_unit: form.pieces_per_unit ? Number(form.pieces_per_unit) : null,
       quantity_owned: form.type === "rentable" ? Number(form.quantity_owned) : 0,
-      vendor_id: form.vendor_id || null,
     };
 
     const res = await fetch("/api/admin/items", {
@@ -310,7 +296,7 @@ export default function ItemForm({ itemCategories, vendors, item }: Props) {
 
         <div>
           <label className={labelClass}>Tipe</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {typeOptions.map((t) => (
               <button
                 key={t.value}
@@ -328,28 +314,6 @@ export default function ItemForm({ itemCategories, vendors, item }: Props) {
             ))}
           </div>
           <p className="mt-1.5 text-xs text-gray-400">{activeHint}</p>
-        </div>
-
-        <div>
-          <label htmlFor="item-vendor" className={labelClass}>
-            Vendor (opsional)
-          </label>
-          <select
-            id="item-vendor"
-            value={form.vendor_id}
-            onChange={(e) => update("vendor_id", e.target.value)}
-            className={inputClass}
-          >
-            <option value="">— Tanpa vendor (barang sendiri) —</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.is_active ? v.name : `${v.name} (nonaktif)`}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-gray-400">
-            Pengelola item/jasa — mis. fotografer atau pemilik properti sewa.
-          </p>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">

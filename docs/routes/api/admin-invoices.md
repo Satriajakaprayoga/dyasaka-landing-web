@@ -42,6 +42,18 @@ Prices are copied either way — later catalog changes never touch an
 existing invoice. `subtotal = total = balance_due` = sum of lines. →
 `{ invoice }` 201.
 
+## Draft editor picker (UI, `InvoiceManager`)
+
+The draft page also loads, next to the variant catalog, the active
+vendor-tagged products (`products.select("id, name, price, vendor_id,
+vendors(name)").not("vendor_id", "is", null).eq("is_active", true)`).
+The "Tambah dari Katalog…" select then has two kinds of optgroups:
+inventory variants grouped by `item_category` (`source_type 'item'` at
+`current_price`) and **Vendor** products grouped by vendor name
+(`source_type 'vendor'`, qty 1 at the product's selling price — admin
+adjusts). Vendor lines are invoice-only: they never enter
+`booking_items` or the checklist, and the POST prefill adds none.
+
 ## PATCH — `{ id, action, … }` dispatch
 
 Loads the invoice (404 `'Invoice tidak ditemukan'`), then:

@@ -7,12 +7,12 @@
 
 ## POST — create
 
-Body: `{ category_id, name, description?, price }`. 400 when `category_id`/`name`/`price` missing.
-Inserts into `products` (`description → null` when omitted) → `{ product }` 201; DB error → 500.
+Body: `{ category_id, name, description?, price, vendor_id?, vendor_price? }`. 400 when `category_id`/`name`/`price` missing.
+Inserts into `products` (`description → null` when omitted; `vendor_id: '' | absent → null`; `vendor_price: '' | absent → null`, else `Number()`) → `{ product }` 201; DB error → 500.
 
 ## PATCH — update
 
-Body: `{ id, category_id?, name?, description?, price?, is_active? }` — whitelist patch plus `updated_at`; 400 without `id`.
+Body: `{ id, category_id?, name?, description?, price?, is_active?, vendor_id?, vendor_price? }` — whitelist patch plus `updated_at`; 400 without `id`. `vendor_id: '' → null`; `vendor_price: '' | null → null`, else `Number()`.
 → `{ product }`; not found → 500 with PostgREST message.
 
 ## DELETE — delete

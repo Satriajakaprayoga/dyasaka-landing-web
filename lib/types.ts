@@ -10,6 +10,9 @@ export type Product = {
   name: string;
   description: string | null;
   price: number;
+  // Admin-only columns — the anon column grants on products exclude them.
+  vendor_id: string | null;
+  vendor_price: number | null;
   is_active: boolean;
 };
 
@@ -54,7 +57,7 @@ export type Booking = {
 
 // ---------- Item master data ----------
 
-export type ItemType = 'consumable' | 'rentable' | 'service';
+export type ItemType = 'consumable' | 'rentable';
 
 export type Vendor = {
   id: string;
@@ -73,7 +76,6 @@ export type Item = {
   type: ItemType;
   pieces_per_unit: number | null;
   quantity_owned: number;
-  vendor_id: string | null;
 };
 
 export type ItemVariant = {

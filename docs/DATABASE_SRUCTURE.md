@@ -300,56 +300,45 @@ Fields:
 
 ---
 
-## 5. Vendors (external partners) — implemented design
+## 5. Vendors (external partners)
 
 Vendors are people/businesses the business coordinates with (photographer,
-clown, MC, rented-property owners). The implemented design (supersedes the
-earlier `vendors` + `vendor_services` + `booking_vendors` sketch, which was
-never built):
+clown, MC, rented-property owners). This section was originally sketched as
+`vendors` + `vendor_services` + `booking_vendors`, then briefly implemented
+as vendor → items (`items.vendor_id` + a `service` item type) and reverted —
+inventory items were too heavy for "a vendor's offerings are just info +
+price". Current state:
 
-- **The relation is vendor → items, NOT vendor → products.** Products are
-  the business's own packages assembled from goods (possibly sourced from
-  several vendors) — they never belong to one vendor.
-- **Services are items with `type = 'service'`** — photographer, clown, etc.
-  are ordinary `items` rows reusing variants for pricing and the existing
-  pickers; no separate services table. The rental lifecycle
-  (`quantity_owned`, checkout/return, `rental_status`) stays unused for
-  service items.
-- **One vendor per item** (`items.vendor_id`, nullable). The same service
-  offered by two vendors = two item rows — accepted at this scale.
+- **Built:** the `vendors` master table below (20261024100000). Items keep
+  no vendor link — `items.vendor_id` and the `service` item type were
+  dropped again in 20261025090000, and checklist generation is back to the
+  original (stock_check + pickup for everything, return for rentable only).
+- **Built:** the product relation (20261025100000) — `products.vendor_id`
+  (nullable FK → vendors, `on delete set null`) and `products.vendor_price`
+  (nullable cost, `>= 0`). Margin = `products.price − vendor_price`,
+  always computed, never hand-entered. Vendor offerings that are simpler
+  than inventory items live as plain product rows. Because products has a
+  public-read RLS policy, the migration re-grants anon SELECT at column
+  level (public-safe columns only), so `vendor_id` / `vendor_price` are
+  admin-only — PostgREST `select=*` returns exactly the granted columns.
+  Invoice lines sourced from a vendor's product carry
+  `source_type 'vendor'`; the customer invoice itself only ever shows the
+  description.
 
 ### `vendors`
 
-Admin-only master record (`vendors` migration, 20261024100000). RLS:
-enable + a single `admin all` policy `to authenticated` — deliberately no
-anon/public policy, vendors are internal supplier data and never appear on
-customer-facing invoices (invoice lines show only the description).
+Admin-only master record (20261024100000). RLS: enable + a single
+`admin all` policy `to authenticated` — deliberately no anon/public policy,
+vendors are internal supplier data and never appear on customer-facing
+invoices (invoice lines show only the description).
 
 - `id` (PK)
 - `name` — not null (e.g. "RW Photograph")
 - `phone` — nullable
 - `note` — nullable, free text (e.g. "DP 50%")
-- `is_active` — not null, default true; inactive vendors stay selectable
-  in the item form (suffixed "(nonaktif)") so existing links remain visible
+- `is_active` — not null, default true
 - `created_at`, `updated_at` — `updated_at` maintained by the shared
   `set_updated_at()` trigger
-
-### Changes to `items`
-
-- `vendor_id` — nullable FK → vendors, `on delete set null` + index:
-  deleting a vendor keeps its items working as unassigned (house) items.
-- `type` check widened to `('consumable', 'rentable', 'service')`.
-- Checklist generation updated: `generate_booking_checklist()` gives
-  service items a `stock_check` row only (reads as "book the vendor") —
-  no `pickup` row (nothing physical to load; consumable + rentable keep
-  theirs), and `return` stays rentable-only.
-
-### Vendor lines on invoices
-
-Invoice lines carry `source_type`; a line added from the invoice draft's
-catalog picker whose item has a vendor is stored as `'vendor'`, house
-items as `'item'` (package line `'custom'`, transport `'transport'`).
-The description is all the customer ever sees.
 
 ---
 
@@ -632,10 +621,11 @@ it) or restock in bulk from reorder points. The schema supports both because
 - The existing `date_capacity` table and its trigger-based recalculation stay
   unchanged — it remains a separate, business-wide daily capacity check that
   sits alongside (not replacing) per-item rentable availability.
-- The vendor relation is vendor → items (`items.vendor_id`), never
-  vendor → products, and one vendor per item — the same service from two
-  vendors is two item rows. Vendors are admin-only data: no anon RLS
-  policy, and invoice lines expose only the description, never the vendor.
+- Vendors are admin-only data: no anon RLS policy, and invoice lines
+  expose only the description, never the vendor. Items (inventory) carry no
+  vendor link — the vendor relation lives on products (`products.vendor_id`
+  + `vendor_price`, hidden from public reads via anon column grants; see
+  section 5).
 - `item_category` is a plain string, intentionally independent of
   `products.category_id`. Do not merge them into a shared `categories`
   table.

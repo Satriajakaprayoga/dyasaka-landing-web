@@ -1,6 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import { notFound } from "next/navigation";
-import type { Category } from "@/lib/types";
+import type { Category, Vendor } from "@/lib/types";
 import ProductForm from "@/components/admin/ProductForm";
 import RecipePanel, {
   type RecipeCatalogItem,
@@ -19,6 +19,7 @@ export default async function EditProductPage({
     { data: product },
     { data: categories },
     { data: catalog },
+    { data: vendors },
   ] = await Promise.all([
     supabase
       .from("products")
@@ -34,6 +35,7 @@ export default async function EditProductPage({
         "id, name, item_category, type, quantity_owned, item_variants(id, color, size, current_price)",
       )
       .order("name"),
+    supabase.from("vendors").select("*").order("name"),
   ]);
 
   if (!product) {
@@ -67,6 +69,7 @@ export default async function EditProductPage({
       <div className="space-y-8">
         <ProductForm
           categories={(categories ?? []) as Category[]}
+          vendors={(vendors ?? []) as Vendor[]}
           product={product}
         />
 

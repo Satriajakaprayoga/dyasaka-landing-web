@@ -16,9 +16,10 @@ behavior, flow, and what each screen/feature needs to do.
 > (`supabase/migrations/20261020120000_booking_workflow.sql`). Company
 > settings (§8) and invoices (§9) are implemented
 > (`20261021090000_company_settings.sql`,
-> `20261021100000_invoices.sql`, `20261024090000_invoice_partially_paid.sql`),
-> and §6 vendors shipped in a redesigned form (vendor → items, services as
-> items — see §6). The spec is
+> `20261021100000_invoices.sql`, `20261024090000_invoice_partially_paid.sql`);
+> §6 vendors shipped as a master table plus the product relation
+> (`products.vendor_id` + vendor price/margin + the invoice picker
+> "Vendor" group — see §6). The spec is
 > kept as written; differences from reality are noted inline.
 
 ---
@@ -163,17 +164,15 @@ This is the core new feature area.
 For each row in the booking's `booking_items`:
 
 - Always generate one `stock_check` phase row
-- Generate one `pickup` phase row for physical items — consumable and
-  rentable; `service` items (vendor services, section 6) get no pickup row
+- Always generate one `pickup` phase row
 - Generate one `return` phase row **only if** the item is `rentable` —
-  consumable and service items never get a return-phase row
+  consumable items never get a return-phase row
 - Admin can also manually add free-text checklist rows not tied to a specific
   item (e.g. "confirm venue address", "call customer to confirm arrival
   time") — these have `booking_item_id` left empty
 
-On a service item's `stock_check` row, "Perlu Pesan" reads as "book/confirm
-the vendor" — there is no separate vendor-tracking row on the booking
-(see section 6).
+Vendors are **not** part of checklist generation — booking items reference
+inventory only; vendors attach to products, not bookings (see section 6).
 
 ### Stock-check phase (screen/behavior)
 
@@ -248,35 +247,40 @@ pages.
 ## 6. Admin — Vendor Management — **Implemented (redesigned)**
 
 > The spec below was originally written as `vendors` + `vendor_services` +
-> `booking_vendors` (attaching vendors to bookings as separate rows). It was
-> **implemented in Oct 2026 with a simpler model** agreed with the
-> stakeholder:
+> `booking_vendors`. An Oct 2026 attempt implemented vendor → items
+> (`items.vendor_id` + a `service` item type) and was **reverted** —
+> inventory items are too heavy for vendor offerings, which "just need
+> information like a product". The agreed model going forward:
 >
-> - The relation is **vendor → items** (`items.vendor_id`, nullable,
->   `on delete set null`), never vendor → products — products are the
->   business's own packages assembled from goods.
-> - **Services are items with `type = 'service'`** (photographer, clown) —
->   ordinary item rows reusing variants for pricing and the existing
->   pickers; no `vendor_services` table. One vendor per item; the same
->   service from two vendors = two item rows (accepted at this scale).
-> - No `booking_vendors` rows: a vendor ends up on a booking by the admin
->   adding the vendor's item to the booking items (the existing
->   add-item mechanism), and on the invoice as a line with
->   `source_type 'vendor'` (via the draft catalog picker) or a hand-typed
->   line. The vendor itself never appears on the customer invoice.
-> - Checklist: service items get a `stock_check` row only ("book the
->   vendor") — no pickup/return rows. The old double-booking warning
->   doesn't exist in this model; rentable vendor property still gets the
->   same-date availability warning via the booking items panel.
-> - Vendor fields: name, phone, note, `is_active` (admin-only RLS —
->   no public select).
+> - **`vendors`** master table — built (name, phone, note, `is_active`;
+>   admin-only RLS; `/admin/vendors` CRUD page).
+> - **`products.vendor_id`** — the vendor relation lives on the existing
+>   products table (nullable FK), **not** on inventory items. A vendor's
+>   offerings are plain product rows — simpler than items, no
+>   variants/stock.
+> - **Vendor price + margin** — products gain a vendor price (cost)
+>   column; margin = product price − vendor price, always computed,
+>   never hand-entered. Admin-only — the customer invoice never sees
+>   cost or margin.
+> - **Invoice integration** — the invoice draft's catalog picker gains a
+>   "Vendor" group fed by vendor products (line starts at selling price,
+>   admin adjusts to the negotiated price, `source_type 'vendor'`).
+>   Vendor products do not enter booking items or the checklist.
+> - No `vendor_services` / `booking_vendors` tables.
 
 ### Vendor master data (as implemented)
 
 - `/admin/vendors` CRUD — create/edit/delete vendors (name, phone, note,
-  is_active); deletion never blocks, it un-assigns items (`SET NULL`)
-- Item form has an optional **Vendor** select; the inventory list and
-  item detail show the type badge **Jasa** for service items
+  is_active); deletion is never blocked (`products.vendor_id` is
+  `ON DELETE SET NULL` — linked products just lose their vendor)
+- Product form — Vendor select (optional; inactive vendors suffixed
+  "(nonaktif)") + Harga Vendor (cost) with a live computed margin hint;
+  the products list shows `vendor Rp X · margin Rp Y` under the price
+  when set (20261025100000)
+- Invoice draft picker — "Vendor" optgroups (one per vendor, active
+  vendor products only) insert a line at the selling price,
+  `source_type 'vendor'`; vendor products never enter booking items or
+  the checklist
 
 ---
 
@@ -472,10 +476,12 @@ the same tables; the decision affects which screen is the main entry point.
   nothing computes margins yet)
 - Automatic/zone-based transportation fee calculation
 - ~~Hard-blocking vendor double-booking (warning only, per section 6)~~ —
-  obsolete under the implemented vendor model (§6): vendors attach via
-  items, so only rentable property gets the same-date availability warning
-- Per-vendor cost/margin tracking (`item_variants.cost_price` and profit
-  reporting stay out of scope)
+  obsolete: vendors no longer attach to bookings at all; only rentable
+  inventory gets the same-date availability warning via the booking items
+  panel
+- Per-vendor margin **reporting/rollups** — the per-product margin
+  (price − vendor price) is in scope, but profit reports across
+  bookings/vendors stay out of this phase
 - Automatic reordering or supplier price comparison
 - Online payment inside the invoice page (the invoice only shows bank details)
 - Customer accounts or logins (invoice access is by private link only)
