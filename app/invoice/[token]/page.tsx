@@ -8,6 +8,11 @@ import {
 } from "@/components/admin/ui";
 import PrintButton from "./PrintButton";
 
+// force-dynamic switches fetch in this route to no-store — a customer must
+// always see the invoice's current totals, never a Data-Cache snapshot from
+// before an admin correction.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Invoice",
   robots: { index: false, follow: false },

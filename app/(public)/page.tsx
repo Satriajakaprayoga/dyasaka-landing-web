@@ -42,14 +42,18 @@ export default async function HomePage() {
   const [featured, categoryRows] = await Promise.all([
     supabase
       .from('products')
-      .select('*, product_images(image_url, sort_order), categories(name)')
+      // Explicit columns — anon only has column-level SELECT on products
+      // (migration 20261025100000); `select=*` fails with permission denied.
+      .select(
+        'id, category_id, name, description, price, is_active, created_at, updated_at, product_images(image_url, sort_order), categories(name)',
+      )
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(FEATURED_LIMIT),
     supabase.from('categories').select('*'),
   ]);
 
-  const products = (featured.data ?? []) as LandingProduct[];
+  const products = (featured.data ?? []) as unknown as LandingProduct[];
   const categories = (categoryRows.data ?? []) as Category[];
 
   const galleryImages: GalleryImage[] = products

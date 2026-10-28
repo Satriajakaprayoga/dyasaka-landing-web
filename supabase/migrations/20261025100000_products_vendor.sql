@@ -15,12 +15,16 @@ create index idx_products_vendor on public.products (vendor_id);
 
 -- Privacy: products has a public-read RLS policy, so the table-level
 -- SELECT grant would expose the new vendor columns to anon clients.
--- Drop the blanket grant and re-grant only the public-safe columns —
--- PostgREST `select=*` resolves to exactly the granted columns, so the
--- public pages keep working while vendor_id / vendor_price stay
--- admin-only (authenticated keeps its table-level grant).
--- MAINTENANCE: every future public-safe products column must be added to
--- this grant list or public pages will silently miss it.
+-- Drop the blanket grant and re-grant only the public-safe columns so
+-- vendor_id / vendor_price stay admin-only (authenticated keeps its
+-- table-level grant).
+-- IMPORTANT (verified on this project's PostgREST): `select=*` does NOT
+-- resolve to only the granted columns — it fails for anon with
+-- `permission denied for table products` (42501). Public pages must
+-- select this exact column list explicitly
+-- (app/(public)/ page.tsx, catalog/page.tsx, product/[id]/page.tsx).
+-- MAINTENANCE: any new public-safe products column must be added BOTH to
+-- this grant list AND to those public pages' select lists.
 revoke select on public.products from anon;
 
 grant select (id, category_id, name, description, price, is_active, created_at, updated_at)

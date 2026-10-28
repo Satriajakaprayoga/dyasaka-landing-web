@@ -9,6 +9,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
+// force-dynamic switches fetch in this route to no-store — without it the
+// supabase calls land in Next.js's Data Cache and this page shows stale
+// product data after admin edits (same reason as the landing page).
+export const dynamic = 'force-dynamic';
+
 const BUSINESS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_WA_NUMBER ?? '';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
 
@@ -34,7 +39,11 @@ const getProductData = cache(async (id: string) => {
   const [productRes, imagesRes, recipeRes] = await Promise.all([
     supabase
       .from('products')
-      .select('*, categories(name)')
+      // Explicit columns — anon only has column-level SELECT on products
+      // (migration 20261025100000); `select=*` fails with permission denied.
+      .select(
+        'id, category_id, name, description, price, is_active, created_at, updated_at, categories(name)',
+      )
       .eq('id', id)
       .eq('is_active', true)
       .maybeSingle(),
@@ -49,7 +58,7 @@ const getProductData = cache(async (id: string) => {
       .eq('product_id', id),
   ]);
 
-  const product = (productRes.data ?? null) as ProductWithCategory | null;
+  const product = (productRes.data ?? null) as unknown as ProductWithCategory | null;
   if (!product) return null;
 
   const images = (imagesRes.data ?? []) as ProductImage[];

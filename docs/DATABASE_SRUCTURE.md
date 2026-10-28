@@ -320,7 +320,10 @@ price". Current state:
   than inventory items live as plain product rows. Because products has a
   public-read RLS policy, the migration re-grants anon SELECT at column
   level (public-safe columns only), so `vendor_id` / `vendor_price` are
-  admin-only — PostgREST `select=*` returns exactly the granted columns.
+  admin-only. **PostgREST caveat (verified):** anon `select=*` on products
+  fails with `42501 permission denied` — it does not resolve `*` to the
+  granted columns — so the public pages (home, catalog, product detail)
+  must list the 8 public columns explicitly.
   Invoice lines sourced from a vendor's product carry
   `source_type 'vendor'`; the customer invoice itself only ever shows the
   description.

@@ -7,6 +7,11 @@ import SortSelect from './SortSelect';
 import { SORT_OPTIONS } from './sort-options';
 import { BalloonIcon } from '@/components/BalloonIcon';
 
+// force-dynamic switches fetch in this route to no-store — without it the
+// supabase calls land in Next.js's Data Cache and the catalog shows stale
+// products after admin edits (same reason as the landing page).
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: { absolute: 'Katalog — Dyasaka Decoration' },
   description:
@@ -57,7 +62,11 @@ async function getCategories() {
 async function getProducts(params: SearchParams) {
   let query = supabase
     .from('products')
-    .select('*, product_images(image_url, sort_order), categories(name)')
+    // Explicit columns — anon only has column-level SELECT on products
+    // (migration 20261025100000); `select=*` fails with permission denied.
+    .select(
+      'id, category_id, name, description, price, is_active, created_at, updated_at, product_images(image_url, sort_order), categories(name)',
+    )
     .eq('is_active', true);
 
   if (params.category) {
@@ -98,7 +107,7 @@ async function getProducts(params: SearchParams) {
   }
 
   const { data } = await query;
-  return (data ?? []) as ProductRow[];
+  return (data ?? []) as unknown as ProductRow[];
 }
 
 function SearchIcon({ className }: { className?: string }) {
