@@ -4,12 +4,11 @@ import type { Product } from "@/lib/types";
 import BookingForm from "@/components/admin/BookingForm";
 import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
-export default async function EditBookingPage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditBookingPage(props: {
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const [{ data: booking }, { data: products }] = await Promise.all([
     supabase

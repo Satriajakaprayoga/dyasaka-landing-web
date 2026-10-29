@@ -7,10 +7,12 @@ import SortSelect from './SortSelect';
 import { SORT_OPTIONS } from './sort-options';
 import { BalloonIcon } from '@/components/BalloonIcon';
 
-// force-dynamic switches fetch in this route to no-store — without it the
-// supabase calls land in Next.js's Data Cache and the catalog shows stale
-// products after admin edits (same reason as the landing page).
+// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
+// to no-store, but force-no-store pins it explicitly so the supabase
+// calls can never land in the Data Cache (.next/cache/fetch-cache) and
+// the catalog can never show stale products after admin edits.
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 export const metadata: Metadata = {
   title: { absolute: 'Katalog — Dyasaka Decoration' },
@@ -135,7 +137,10 @@ const pillIdle =
 const chip =
   'inline-flex items-center gap-1 rounded-full bg-pink-50 px-3 py-1.5 text-xs font-medium text-pink-700 transition hover:bg-pink-100';
 
-export default async function CatalogPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function CatalogPage(props: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const searchParams = await props.searchParams;
   const [categories, products] = await Promise.all([getCategories(), getProducts(searchParams)]);
 
   const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));

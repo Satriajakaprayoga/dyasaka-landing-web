@@ -7,7 +7,7 @@ import { createServerSupabase } from '@/lib/supabase-server';
  * so the one-row invariant holds at the database level.
  */
 export async function PATCH(req: NextRequest) {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const {
     data: { user },

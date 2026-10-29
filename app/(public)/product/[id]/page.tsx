@@ -9,10 +9,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
-// force-dynamic switches fetch in this route to no-store — without it the
-// supabase calls land in Next.js's Data Cache and this page shows stale
-// product data after admin edits (same reason as the landing page).
+// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
+// to no-store, but force-no-store pins it explicitly so the supabase
+// calls can never land in the Data Cache and this page can never show
+// stale product data after admin edits.
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 const BUSINESS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_WA_NUMBER ?? '';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
@@ -69,12 +71,11 @@ const getProductData = cache(async (id: string) => {
   return { product, images, recipe };
 });
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { id: string };
+export async function generateMetadata(props: {
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const result = await getProductData(params.id);
+  const { id } = await props.params;
+  const result = await getProductData(id);
   if (!result) {
     return { title: { absolute: 'Produk tidak ditemukan — Dyasaka Decoration' } };
   }
@@ -123,8 +124,11 @@ function toRecipeItems(recipe: RecipeRow[]): RecipeItem[] {
     .filter((item): item is RecipeItem => item !== null);
 }
 
-export default async function ProductPage({ params }: { params: { id: string } }) {
-  const result = await getProductData(params.id);
+export default async function ProductPage(props: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await props.params;
+  const result = await getProductData(id);
   if (!result) return notFound();
 
   const { product, images, recipe } = result;

@@ -3,12 +3,11 @@ import { notFound } from "next/navigation";
 import ItemForm from "@/components/admin/ItemForm";
 import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
-export default async function EditItemPage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditItemPage(props: {
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const [{ data: item }, { data: allItems }] = await Promise.all([
     supabase.from("items").select("*").eq("id", params.id).single(),

@@ -23,12 +23,11 @@ import { BookingPanelsSkeleton } from "@/components/admin/skeletons";
 
 type BookingWithProduct = Booking & { products: Pick<Product, "name"> | null };
 
-export default async function BookingDetailPage({
-  params,
-}: {
-  params: { id: string };
+export default async function BookingDetailPage(props: {
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const { data: booking } = await supabase
     .from("bookings")
@@ -179,7 +178,7 @@ async function BookingPanelsSection({
   eventDate: string;
   dpReceivedAt: string | null;
 }) {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const [itemsRes, checklistRes, sameDayRes, catalogRes] = await Promise.all([
     supabase

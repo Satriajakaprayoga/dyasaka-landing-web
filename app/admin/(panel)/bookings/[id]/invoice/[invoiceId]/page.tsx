@@ -17,12 +17,11 @@ type BookingRef = Pick<
   "id" | "customer_name" | "phone" | "status" | "event_date"
 >;
 
-export default async function InvoiceManagerPage({
-  params,
-}: {
-  params: { id: string; invoiceId: string };
+export default async function InvoiceManagerPage(props: {
+  params: Promise<{ id: string; invoiceId: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const [
     bookingRes,

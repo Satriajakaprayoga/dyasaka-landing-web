@@ -8,12 +8,11 @@ import RecipePanel, {
 } from "@/components/admin/RecipePanel";
 import { BackLink, Breadcrumbs } from "@/components/admin/ui";
 
-export default async function EditProductPage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditProductPage(props: {
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const [
     { data: product },

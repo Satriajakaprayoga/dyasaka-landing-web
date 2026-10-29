@@ -30,7 +30,7 @@ export default function BookingsListPage() {
 }
 
 async function BookingsList() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: bookings } = await supabase
     .from("bookings")

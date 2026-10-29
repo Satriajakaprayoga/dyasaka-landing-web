@@ -106,7 +106,7 @@ export default function AdminHomePage() {
 }
 
 async function StatsGrid() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const [
     { count: productCount },
@@ -181,7 +181,7 @@ async function StatsGrid() {
 }
 
 async function UpcomingBookings() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const today = new Date().toISOString().slice(0, 10);
 
   const { data: upcoming } = await supabase
@@ -247,7 +247,7 @@ async function UpcomingBookings() {
 
 /** DP-paid upcoming bookings whose pickup phase isn't finished yet. */
 async function PrepNeeded({ today }: { today: string }) {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data } = await supabase
     .from("bookings")
@@ -312,7 +312,7 @@ async function PrepNeeded({ today }: { today: string }) {
 
 /** Rentables currently out of the warehouse (checked_out). */
 async function CheckedOutItems() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data } = await supabase
     .from("booking_items")
@@ -383,7 +383,7 @@ async function CheckedOutItems() {
 
 /** Variants at or below their reorder point. */
 async function LowStock() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data } = await supabase
     .from("item_variants")
@@ -447,7 +447,7 @@ async function LowStock() {
 
 /** stock_check rows marked "need_order" for DP-paid bookings. */
 async function NeedOrder() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data } = await supabase
     .from("checklist_items")

@@ -12,12 +12,11 @@ import { BackLink, Badge, Breadcrumbs } from "@/components/admin/ui";
 import { PencilIcon } from "@/components/admin/icons";
 import { VariantsPanelSkeleton } from "@/components/admin/skeletons";
 
-export default async function ItemDetailPage({
-  params,
-}: {
-  params: { id: string };
+export default async function ItemDetailPage(props: {
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const params = await props.params;
+  const supabase = await createServerSupabase();
 
   const { data: item } = await supabase
     .from("items")
@@ -83,7 +82,7 @@ async function VariantsSection({
   itemId: string;
   variants: ItemVariant[];
 }) {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const variantIds = variants.map((v) => v.id);
 
   const [movementsRes, pricesRes] = await Promise.all([

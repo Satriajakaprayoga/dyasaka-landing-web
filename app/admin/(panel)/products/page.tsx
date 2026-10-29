@@ -30,7 +30,7 @@ export default function ProductsListPage() {
 }
 
 async function ProductsList() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: products } = await supabase
     .from("products")
