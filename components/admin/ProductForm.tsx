@@ -4,13 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Category, Product, ProductImage, Vendor } from "@/lib/types";
-import {
-  Card,
-  btnPrimary,
-  btnSecondary,
-  inputClass,
-  labelClass,
-} from "./ui";
+import { Card, btnPrimary, btnSecondary, inputClass, labelClass } from "./ui";
 import { ImageIcon, PlusIcon } from "./icons";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -65,13 +59,7 @@ async function compressImage(file: File): Promise<File> {
   return new File([blob], name, { type: "image/jpeg" });
 }
 
-function FilePreview({
-  file,
-  onRemove,
-}: {
-  file: File;
-  onRemove: () => void;
-}) {
+function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [url, setUrl] = useState<string>("");
 
   useEffect(() => {
@@ -155,11 +143,10 @@ export default function ProductForm({ categories, vendors, product }: Props) {
       product?.vendor_price != null ? String(product.vendor_price) : "",
     is_active: product ? String(product.is_active) : "true",
   });
-  const [existingImages, setExistingImages] = useState<ProductImage[]>(
-    () =>
-      [...(product?.product_images ?? [])].sort(
-        (a, b) => a.sort_order - b.sort_order,
-      ),
+  const [existingImages, setExistingImages] = useState<ProductImage[]>(() =>
+    [...(product?.product_images ?? [])].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    ),
   );
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +241,8 @@ export default function ProductForm({ categories, vendors, product }: Props) {
     } catch (err) {
       return {
         ok: false,
-        message: err instanceof Error ? err.message : "kesalahan tidak diketahui",
+        message:
+          err instanceof Error ? err.message : "kesalahan tidak diketahui",
       };
     }
   }
@@ -275,82 +263,98 @@ export default function ProductForm({ categories, vendors, product }: Props) {
     setSubmitting(true);
     setError(null);
 
-    const payload = {
-      category_id: form.category_id,
-      name: form.name,
-      description: form.description,
-      price: Number(form.price),
-      vendor_id: form.vendor_id,
-      vendor_price: form.vendor_price === "" ? null : Number(form.vendor_price),
-      ...(isEdit ? { is_active: form.is_active === "true" } : {}),
-    };
+    try {
+      const payload = {
+        category_id: form.category_id,
+        name: form.name,
+        description: form.description,
+        price: Number(form.price),
+        vendor_id: form.vendor_id,
+        vendor_price: form.vendor_price === "" ? null : Number(form.vendor_price),
+        ...(isEdit ? { is_active: form.is_active === "true" } : {}),
+      };
 
-    // 1. Create or update the product record
-    const res = await fetch("/api/admin/products", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isEdit ? { id: product!.id, ...payload } : payload),
-    });
+      // 1. Create or update the product record
+      const res = await fetch("/api/admin/products", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isEdit ? { id: product!.id, ...payload } : payload),
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to save product");
-      setSubmitting(false);
-      return;
-    }
-
-    const { product: saved } = await res.json();
-    const productId: string = isEdit ? product!.id : saved.id;
-
-    // 2. Delete removed existing images (storage + record)
-    const removed = (product?.product_images ?? []).filter(
-      (img) => !existingImages.some((cur) => cur.id === img.id),
-    );
-    for (const img of removed) {
-      await deleteImage(img);
-    }
-
-    // 3. Renumber kept images so sort_order stays contiguous 0..n-1
-    //    (removals leave gaps; new uploads must not collide)
-    for (let i = 0; i < existingImages.length; i++) {
-      const img = existingImages[i];
-      if (img.sort_order === i) continue;
-      const { error } = await supabase
-        .from("product_images")
-        .update({ sort_order: i })
-        .eq("id", img.id);
-      if (error) {
-        setError(`Gagal memperbarui urutan foto: ${error.message}`);
-        setSubmitting(false);
+      if (!res.ok) {
+        // Routes return JSON errors; a crashed server returns an HTML page
+        // that .json() cannot parse — fall back to the status code.
+        let message = `Gagal menyimpan produk (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // HTML error page — keep the generic message.
+        }
+        setError(message);
         return;
       }
-    }
 
-    // 4. Upload new photos, collecting failures instead of swallowing them
-    const base = existingImages.length;
-    const failures: string[] = [];
-    const failedFiles: File[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const result = await uploadImage(files[i], productId, base + i);
-      if (result.ok) continue;
-      failures.push(`• ${files[i].name}: ${result.message}`);
-      failedFiles.push(files[i]);
-    }
+      const { product: saved } = await res.json();
+      const productId: string = isEdit ? product!.id : saved.id;
 
-    if (failures.length > 0) {
-      // Stay on the page with the failed files still selected so the user
-      // can retry without re-picking them.
-      setFiles(failedFiles);
-      setError(
-        `Beberapa foto gagal disimpan — produk sudah tersimpan. Cek lalu simpan lagi.\n${failures.join("\n")}`,
+      // 2. Delete removed existing images (storage + record)
+      const removed = (product?.product_images ?? []).filter(
+        (img) => !existingImages.some((cur) => cur.id === img.id),
       );
-      setSubmitting(false);
-      return;
-    }
+      for (const img of removed) {
+        await deleteImage(img);
+      }
 
-    setSubmitting(false);
-    router.push("/admin/products");
-    router.refresh();
+      // 3. Renumber kept images so sort_order stays contiguous 0..n-1
+      //    (removals leave gaps; new uploads must not collide)
+      for (let i = 0; i < existingImages.length; i++) {
+        const img = existingImages[i];
+        if (img.sort_order === i) continue;
+        const { error } = await supabase
+          .from("product_images")
+          .update({ sort_order: i })
+          .eq("id", img.id);
+        if (error) {
+          setError(`Gagal memperbarui urutan foto: ${error.message}`);
+          return;
+        }
+      }
+
+      // 4. Upload new photos, collecting failures instead of swallowing them
+      const base = existingImages.length;
+      const failures: string[] = [];
+      const failedFiles: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const result = await uploadImage(files[i], productId, base + i);
+        if (result.ok) continue;
+        failures.push(`• ${files[i].name}: ${result.message}`);
+        failedFiles.push(files[i]);
+      }
+
+      if (failures.length > 0) {
+        // Stay on the page with the failed files still selected so the user
+        // can retry without re-picking them.
+        setFiles(failedFiles);
+        setError(
+          `Beberapa foto gagal disimpan — produk sudah tersimpan. Cek lalu simpan lagi.\n${failures.join("\n")}`,
+        );
+        return;
+      }
+
+      router.push("/admin/products");
+      router.refresh();
+    } catch (err) {
+      // Network failure or any unexpected error — surface it instead of
+      // leaving the button stuck with no feedback.
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan tak terduga saat menyimpan",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -467,9 +471,7 @@ export default function ProductForm({ categories, vendors, product }: Props) {
           <label className={labelClass}>Foto Produk</label>
           <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 px-4 py-6 text-center transition hover:border-gray-400 hover:bg-gray-50">
             <ImageIcon className="h-6 w-6 text-gray-400" />
-            <span className="text-sm text-gray-600">
-              Klik untuk pilih foto
-            </span>
+            <span className="text-sm text-gray-600">Klik untuk pilih foto</span>
             <span className="text-xs text-gray-400">
               JPG/PNG/WebP · maks {MAX_FILE_MB}MB · dikompres otomatis · bisa
               pilih beberapa

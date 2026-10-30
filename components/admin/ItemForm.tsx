@@ -237,30 +237,48 @@ export default function ItemForm({ itemCategories, item }: Props) {
     setSubmitting(true);
     setError(null);
 
-    const payload = {
-      name: form.name,
-      item_category: form.item_category,
-      type: form.type,
-      pieces_per_unit: form.pieces_per_unit ? Number(form.pieces_per_unit) : null,
-      quantity_owned: form.type === "rentable" ? Number(form.quantity_owned) : 0,
-    };
+    try {
+      const payload = {
+        name: form.name,
+        item_category: form.item_category,
+        type: form.type,
+        pieces_per_unit: form.pieces_per_unit ? Number(form.pieces_per_unit) : null,
+        quantity_owned: form.type === "rentable" ? Number(form.quantity_owned) : 0,
+      };
 
-    const res = await fetch("/api/admin/items", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isEdit ? { id: item!.id, ...payload } : payload),
-    });
+      const res = await fetch("/api/admin/items", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isEdit ? { id: item!.id, ...payload } : payload),
+      });
 
-    setSubmitting(false);
+      if (!res.ok) {
+        // Routes return JSON errors; a crashed server returns an HTML page
+        // that .json() cannot parse — fall back to the status code.
+        let message = `Gagal menyimpan item (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // HTML error page — keep the generic message.
+        }
+        setError(message);
+        return;
+      }
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Gagal menyimpan item");
-      return;
+      router.push("/admin/items");
+      router.refresh();
+    } catch (err) {
+      // Network failure or any unexpected error — surface it instead of
+      // leaving the button stuck with no feedback.
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan tak terduga saat menyimpan",
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    router.push("/admin/items");
-    router.refresh();
   }
 
   const activeHint =
