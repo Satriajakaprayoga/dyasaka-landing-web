@@ -50,9 +50,18 @@ export default function VendorsPage() {
   );
 
   async function loadVendors() {
-    const { data } = await supabase.from("vendors").select("*").order("name");
-    setVendors((data ?? []) as Vendor[]);
-    setInitialLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("vendors")
+        .select("*")
+        .order("name");
+      if (error) throw new Error(error.message);
+      setVendors((data ?? []) as Vendor[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat vendor");
+    } finally {
+      setInitialLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -81,22 +90,34 @@ export default function VendorsPage() {
     setSubmitting(true);
     setError(null);
 
-    const res = await fetch("/api/admin/vendors", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch("/api/admin/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    setSubmitting(false);
+      if (!res.ok) {
+        // Routes return JSON errors; a crashed server returns an HTML page
+        // that .json() cannot parse — fall back to the status code.
+        let message = `Gagal menambah vendor (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // HTML error page — keep the generic message.
+        }
+        setError(message);
+        return;
+      }
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Gagal menambah vendor");
-      return;
+      setForm(emptyEdit);
+      loadVendors();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menambah vendor");
+    } finally {
+      setSubmitting(false);
     }
-
-    setForm(emptyEdit);
-    loadVendors();
   }
 
   function startEdit(v: Vendor) {
@@ -123,22 +144,33 @@ export default function VendorsPage() {
     setBusyId(editingId);
     setError(null);
 
-    const res = await fetch("/api/admin/vendors", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: editingId, ...payload }),
-    });
-    setBusyId(null);
+    try {
+      const res = await fetch("/api/admin/vendors", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, ...payload }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Gagal mengubah vendor");
-      return;
+      if (!res.ok) {
+        let message = `Gagal mengubah vendor (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // HTML error page — keep the generic message.
+        }
+        setError(message);
+        return;
+      }
+
+      cancelEdit();
+      loadVendors();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal mengubah vendor");
+    } finally {
+      setBusyId(null);
     }
-
-    cancelEdit();
-    loadVendors();
-    router.refresh();
   }
 
   function closeConfirm() {
@@ -151,22 +183,31 @@ export default function VendorsPage() {
     setDeleting(true);
     setError(null);
 
-    const res = await fetch(`/api/admin/vendors?id=${confirmRow.id}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`/api/admin/vendors?id=${confirmRow.id}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
+      if (!res.ok) {
+        let message = `Gagal menghapus vendor (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body.error) message = body.error;
+        } catch {
+          // HTML error page — keep the generic message.
+        }
+        setError(message);
+        return;
+      }
+
+      loadVendors();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menghapus vendor");
+    } finally {
       closeConfirm();
       setDeleting(false);
-      setError(body.error ?? "Gagal menghapus vendor");
-      return;
     }
-
-    closeConfirm();
-    setDeleting(false);
-    loadVendors();
-    router.refresh();
   }
 
   return (

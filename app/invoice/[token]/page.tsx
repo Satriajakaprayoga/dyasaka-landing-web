@@ -8,10 +8,12 @@ import {
 } from "@/components/admin/ui";
 import PrintButton from "./PrintButton";
 
-// force-dynamic switches fetch in this route to no-store — a customer must
-// always see the invoice's current totals, never a Data-Cache snapshot from
-// before an admin correction.
+// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
+// to no-store, but force-no-store pins it explicitly so the invoice fetch
+// can never land in the Data Cache and a customer can never see totals
+// from before an admin correction.
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export const metadata = {
   title: "Invoice",
@@ -30,18 +32,17 @@ type InvoiceRpc = {
   };
 };
 
-export default async function PublicInvoicePage({
-  params,
-}: {
-  params: { token: string };
+export default async function PublicInvoicePage(props: {
+  params: Promise<{ token: string }>;
 }) {
-  const supabase = createServerSupabase();
+  const { token } = await props.params;
+  const supabase = await createServerSupabase();
 
   // Public read path: ONLY the security-definer RPC — anon has no
   // select on invoices. Unknown/draft/void tokens all return null →
   // the same plain 404, revealing nothing.
   const [rpcRes, profileRes] = await Promise.all([
-    supabase.rpc("get_invoice_by_token", { p_token: params.token }),
+    supabase.rpc("get_invoice_by_token", { p_token: token }),
     supabase
       .from("company_profile")
       .select("company_name, logo_url, address, phone, email")

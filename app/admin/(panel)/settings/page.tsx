@@ -5,7 +5,7 @@ import BankAccountsPanel from "@/components/admin/BankAccountsPanel";
 import { Breadcrumbs, Card, PageHeader } from "@/components/admin/ui";
 
 export default async function SettingsPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const [profileRes, banksRes] = await Promise.all([
     supabase.from("company_profile").select("*").limit(1).maybeSingle(),

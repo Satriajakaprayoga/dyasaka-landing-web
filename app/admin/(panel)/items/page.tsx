@@ -36,7 +36,7 @@ export default function ItemsListPage() {
 }
 
 async function ItemsList() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: items } = await supabase
     .from("items")
