@@ -20,6 +20,11 @@ the existing schema (`categories`, `products`, `product_images`, `bookings`,
 - Invoices that customers can open by private link and download as PDF
 - Traffic-source tracking, so each booking records where the customer came from
 - Planning and procurement of goods (suppliers, purchase orders, receiving)
+- A money ledger (transactions) that drives cashflow and margin per event
+- Staff, and helper cost planned per event before it happens
+- Purchase plans (buy, create, fix, R&D, upgrade) linked to purchase orders
+- Cost data on items (plus the vendor cost already on products), so margin
+  per event can be computed
 
 Use this as the source of truth for schema generation. Table names, field names,
 and relationships below should be followed exactly unless noted otherwise.
@@ -155,6 +160,9 @@ stand set) still gets exactly one variant row.
   rentable: usable units currently owned, reflecting real-world condition, not
   date-based availability)
 - `current_price`
+- `cost_price` — nullable; what one unit costs the business, updated from the
+  `unit_cost` of the latest received purchase order line (section 11). Never
+  shown to customers. Used only for margin reporting (section 14)
 - `reorder_point` — nullable; triggers a low-stock warning in the admin UI
   when `stock_quantity` falls at or below this value
 - `created_at`, `updated_at`
@@ -229,6 +237,10 @@ affecting the original product recipe.
 - `unit_price` — snapshot of `item_variants.current_price` at the moment this
   row is created; never recalculated later, so past bookings are unaffected by
   future price changes
+- `unit_cost` — nullable snapshot of `item_variants.cost_price` taken when this
+  row is created, same freeze-at-creation pattern as `unit_price`. Only
+  meaningful for consumable items, whose material cost is consumed by the
+  event. Rentable items are assets and carry no per-event material cost
 - `rental_status` — nullable; only used when the linked variant's item is
   `rentable`. One of: `reserved`, `checked_out`, `returned`
 - `checked_out_at` — nullable timestamp
@@ -415,25 +427,29 @@ and an invoice must show the right one.
 
 An invoice stores its own copy of everything it shows, rather than reading
 live from bookings, items, or company settings. This is the same "freeze the
-price" principle as `booking_items.unit_price`. Snapshots are frozen, but the
-invoice itself is **editable until it is paid** (see the decision below).
+price" principle as `booking_items.unit_price`. A booking can have several
+invoices over its life — first a deposit (`dp`) invoice, later a `final`
+invoice (see the decision below). Paid amount and balance due are **not
+stored columns**: they are calculated from the ledger's `in` transactions
+linked to the invoice (see "Link to the money ledger" below).
 
 ### `invoices`
 
 - `id` (PK)
-- `booking_id` (FK → bookings)
+- `booking_id` (FK → bookings) — not unique; a booking can have several
+  invoices over time
+- `invoice_type` — one of: `dp`, `final`; a booking has at most one non-void
+  invoice of each type
 - `invoice_number` — unique, human-readable
 - `access_token` — unique, long and unguessable; this is what the customer's
   link contains, never the booking id or invoice id
-- `status` — one of: `draft`, `issued`, `partially_paid`, `paid`, `void`.
-  `partially_paid` is system-derived — the API recomputes it on every write
-  (`amount_paid > 0` and `balance_due > 0`) and never accepts it from clients
+- `status` — one of: `draft`, `issued`, `paid`, `void`. Draft is editable and
+  never visible to customers; issued is frozen; `paid` follows from the
+  ledger payments (below); void is the correction path
 - `issue_date`
 - `due_date` — nullable
 - `subtotal`
 - `total`
-- `amount_paid` — for example the down payment received
-- `balance_due`
 - `bank_account_id` — FK → `company_bank_accounts`, `on delete set null`;
   the draft-time working reference for which account to show. Only used
   while drafting — at issue the account is copied into
@@ -442,6 +458,9 @@ invoice itself is **editable until it is paid** (see the decision below).
 - `company_name_snapshot` — company name as it was when issued
 - `bank_account_snapshot` — the bank name, holder and number shown on this
   invoice, copied as text when issued
+- `customer_name_snapshot`, `phone_snapshot`, `event_address_snapshot`,
+  `event_date_snapshot` — the customer and event details as they were when
+  the invoice was issued
 - `notes` — nullable
 - `created_at`, `updated_at`
 
@@ -469,30 +488,50 @@ the transport fee, or be typed freely by the admin.
   invoice.
 - The PDF is generated on demand from the stored invoice data. PDF files are
   not stored.
-- Invoices in `draft` or `void` status are never visible through the public
-  link. Voiding an invoice keeps the row and changes its status; nothing is
-  deleted.
+- Invoices in `draft` status are never visible through the public link. A
+  `void` invoice shows only a short "replaced by a newer invoice" notice with
+  a link to the booking's current invoice, and no amounts. Voiding an invoice
+  keeps the row and changes its status; nothing is deleted.
 
-**Decision (recorded):** one invoice per booking, in an editable-until-paid
-model. `booking_id` is a UNIQUE foreign key (`on delete cascade`), so a
-booking cannot grow a second invoice; the down payment is recorded as a
-payment against that single invoice (`amount_paid` / `balance_due`), not as a
-separate DP invoice.
+**Decision (recorded):** several invoices per booking. `booking_id` is not
+unique. Each invoice has an `invoice_type` (`dp` or `final`), and a booking
+may have at most one non-void invoice of each type. The deposit invoice has a
+single line (the deposit amount, typed by the admin, optionally prefilled from
+a percentage); items added to the booking after the deposit are not billed
+until the final invoice. A wrong issued invoice is voided and replaced; the
+voided number is never reused — the invoice number sequence
+(`INV/YYYY/MM/NNNN`) counts every invoice issued in the month, regardless of
+later status.
 
-- `draft`, `issued` and `partially_paid` are fully editable: lines, due date,
-  notes and bank account can be corrected at any time; totals recompute and
-  the status re-derives from the payment math on every save (settled → `paid`,
-  money in → `partially_paid`, nothing in → `issued`). Editing the bank
-  account after issue re-snapshots `bank_account_snapshot`.
-- `paid` is strictly read-only — no void, no payment reversal (accepted
-  trade-off: a wrongly recorded final payment can only be fixed by direct DB
-  edit). `void` is read-only too, reachable only from `issued` /
-  `partially_paid`.
-- Deleting is draft-only: issued invoices keep their `access_token` links
-  alive, so void — not delete — is the correction path after issue. Voided
-  rows are kept and their numbers are never reused — the invoice number
-  sequence counts every invoice issued in the month, regardless of later
-  status.
+- Issued invoices are frozen: lines, totals, company name, bank account and
+  customer details are copied in at issue. Later changes to prices, items,
+  customer details or company settings never alter an issued invoice. To
+  correct one, void it and create a new invoice of the same type.
+- Paid amount and balance due are calculated from the ledger, not stored on
+  the invoice, so an issued invoice stays frozen while payments change.
+- Draft lines are prefilled from the booking's items plus the transport fee;
+  vendor lines are typed by the admin when needed, and drafts never
+  auto-resync when the booking changes afterwards.
+- PDFs come from the browser print dialog, not a PDF library.
+- **Open decision:** whether the deposit is a fixed percentage of the total or
+  typed freely each time.
+
+### Link to the money ledger (added with section 12)
+
+Customer payments are recorded in the ledger as `in` transactions with
+`invoice_id` (and `booking_id`) set. The invoice's paid amount and balance due
+are **calculated from those rows** — the same pattern as `stock_quantity` and
+`stock_movements`. The code path that records a payment writes the ledger row
+and re-derives the invoice's payment state in one step, so the two cannot
+drift. No separate invoice payments table exists.
+
+When the customer adds items after the deposit, the admin voids the final
+invoice and issues a new one; the total comes from the current booking lines
+and the balance due follows from the payments already received.
+
+**Open decision:** the rule that `paid` invoices accept no payment reversal.
+With the ledger, a wrong payment could be fixed by a reversing row; allowing
+that would mean letting a `paid` invoice step back to `issued`.
 
 ---
 
@@ -601,7 +640,203 @@ it) or restock in bulk from reorder points. The schema supports both because
 
 ---
 
-## 12. Key business rules to preserve
+## 12. Money ledger (cashflow)
+
+All money movements are recorded in one append-only ledger. Cashflow, invoice
+payments and margin per event are all read from it, so there is no separate
+payments table.
+
+### `transaction_categories`
+
+Unlike `item_category`, this is a real lookup table, because
+reports add up amounts per category and a misspelled free-text value would
+split a total in two.
+
+- `id` (PK)
+- `name` — e.g. "Customer payment", "Gasoline", "Helper pay", "Salary",
+  "Vendor payment", "Goods purchase", "Repair"
+- `direction` — one of: `in`, `out`
+- `is_active`
+- `sort_order`
+
+### `transactions`
+
+- `id` (PK)
+- `direction` — one of: `in`, `out`
+- `amount` — always positive; the direction gives the sign
+- `transaction_date` — the date the money actually moved
+- `category_id` (FK → transaction_categories)
+- `account` — plain string, nullable (e.g. "Cash", "BCA"); which pot the money
+  is in or came from
+- `description` — nullable
+- `booking_id` — nullable FK → bookings
+- `invoice_id` — nullable FK → invoices; set on customer payments, to show
+  which invoice they were paid against
+- `purchase_order_id` — nullable FK → purchase_orders
+- `plan_line_id` — nullable FK → purchase_plan_lines
+- `staff_id` — nullable FK → staff
+- `booking_staff_id` — nullable FK → booking_staff
+- `vendor_id` — nullable FK → vendors
+- `period_start`, `period_end` — nullable dates; the period a payment covers,
+  used for weekly or monthly salary. Not needed for per-event helper pay
+- `reverses_transaction_id` — nullable FK → transactions; set when a row
+  corrects an earlier mistaken row
+- `created_at`
+
+Rules:
+
+- The ledger is append-only. A mistake is fixed by adding a reversing row and
+  then the correct row, never by editing or deleting.
+- Customer payments are `in` rows with `invoice_id` (and `booking_id`) set.
+  This replaces any separate invoice payments table. Each invoice's paid
+  amount and balance due are calculated from these rows (section 9).
+- A payment to a supplier is an `out` row with `purchase_order_id`. Several
+  rows may exist for one order (part payments).
+- Salary can be weekly, monthly or per event; the rhythm lives in the data
+  (period fields and optional `booking_id`), not in the schema.
+
+---
+
+## 13. Staff and planned helper cost
+
+### `staff`
+
+People who are paid, both permanent staff and event helpers. One person can be
+both.
+
+- `id` (PK)
+- `name`
+- `phone` — nullable
+- `role` — plain string, nullable (e.g. "Helper", "Driver", "Decorator")
+- `pay_basis` — plain string, nullable and informational only (e.g. "monthly",
+  "weekly", "per event")
+- `is_active`
+- `notes` — nullable
+- `created_at`, `updated_at`
+
+### `booking_staff`
+
+A staff member assigned to a specific event, with the pay agreed beforehand.
+One row per person per event.
+
+- `id` (PK)
+- `booking_id` (FK → bookings)
+- `staff_id` (FK → staff)
+- `role` — plain string, nullable; the role on this event
+- `planned_pay` — the pay agreed for this event
+- `status` — one of: `planned`, `confirmed`, `cancelled`
+- `note` — nullable
+- `created_at`, `updated_at`
+
+Rules:
+
+- Whether an assignment has been paid is not stored; it is derived from
+  `out` transactions that carry its `booking_staff_id`.
+- **Double-booking check (warning only):** when assigning a staff member,
+  warn if the same person already has another non-cancelled assignment on the
+  same `event_date`. This never blocks the admin.
+- Planned pay of non-cancelled assignments is the expected helper cost of the
+  event; actual helper cost is the sum of the matching ledger rows.
+
+---
+
+## 14. Margin and cashflow reports (computed, nothing stored)
+
+### Margin per event
+
+- **Revenue:** the sum of `in` transactions for the booking.
+- **Expected revenue:** the total of the booking's invoice (void invoices
+  excluded), or the booking total when no invoice exists yet.
+- **Direct costs, actual:**
+  - Materials: for each consumable `booking_items` row, `quantity` times
+    `unit_cost`.
+  - Vendors: `out` transactions with the booking's `booking_id` and a
+    `vendor_id`.
+  - Helpers: `out` transactions with the booking's `booking_id` and a
+    `staff_id`.
+  - Other event costs (gasoline, parking, repairs): `out` transactions with
+    the booking's `booking_id`.
+- **Direct costs, expected (before the event):** materials as above, plus
+  `products.vendor_price` when the booking's product has a vendor (section 5;
+  the product's margin is `price` minus `vendor_price`), plus `planned_pay` of
+  non-cancelled `booking_staff`.
+- **Margin** is revenue minus direct costs. The report shows expected and
+  actual side by side.
+- **Avoiding double counting:** transactions that carry a `purchase_order_id`
+  are never counted in event margin. Material cost reaches the event through
+  `booking_items.unit_cost`; counting the purchase payment too would count the
+  same goods twice. Purchase payments only appear in cashflow.
+- Fixed salaries and rent are not attached to events. They appear in the
+  monthly report only, unless the admin links a payment to a booking.
+- Rentable items are assets; no depreciation or per-event cost is computed
+  for them.
+
+### Monthly cashflow
+
+- Money in, money out and net, per month, grouped by `transaction_categories`,
+  using `transaction_date`. The period fields allow a later switch to
+  period-based reporting without losing data.
+- Optionally filtered by `account`.
+
+---
+
+## 15. Purchase plans
+
+A plan is a stored intention to buy, create or fix something, kept separate
+from purchase orders. A purchase order is a commitment to a supplier; a plan can
+change, shrink or be dropped without cluttering the orders list.
+
+### `purchase_plans`
+
+- `id` (PK)
+- `title`
+- `plan_type` — one of: `buy`, `create`, `fix`, `rnd`, `upgrade`
+- `reason` — nullable
+- `booking_id` — nullable FK → bookings; set when the plan exists for one event
+- `budget_estimate` — nullable
+- `target_date` — nullable
+- `status` — one of: `draft`, `approved`, `in_progress`, `done`, `cancelled`
+- `created_at`, `updated_at`
+
+### `purchase_plan_lines`
+
+- `id` (PK)
+- `plan_id` (FK → purchase_plans, cascade delete)
+- `item_variant_id` — nullable FK → item_variants. Optional, because tools,
+  repairs and R&D items are often not in the catalog
+- `description` — free text, required
+- `quantity`
+- `estimated_unit_cost` — nullable
+- `supplier_id` — nullable FK → suppliers
+- `purchase_order_item_id` — nullable FK → purchase_order_items; the link that
+  shows the line was ordered
+- `replaces_item_variant_id` — nullable FK → item_variants; for `upgrade`
+  plans, the existing item being replaced
+- `done_at` — nullable timestamp; set by hand for lines that involve no
+  supplier (a repair done in-house, something built by the team)
+- `outcome` — nullable, one of: `testing`, `adopted`, `rejected`; used by `rnd`
+  plans only
+- `outcome_note` — nullable
+- `sort_order`
+
+Rules:
+
+- **Line execution status is derived, not stored:** no order link and no
+  `done_at` = not executed; linked to an order line = ordered; the order line
+  fully received, or `done_at` set = done.
+- Plan `status` follows its lines: `approved` becomes `in_progress` when the
+  first line is linked or done, and `done` when every line is done.
+  `cancelled` is set by hand.
+- Costs of lines done without a supplier are recorded in the ledger with
+  `plan_line_id`, so plan versus actual cost can be compared.
+- When an `rnd` line is `adopted`, the admin creates the real item and
+  variant, and the line is updated to point to it.
+- For `upgrade` plans, retiring the replaced units is a normal
+  `stock_movements` adjustment, so the stock ledger stays accurate.
+
+---
+
+## 16. Key business rules to preserve
 
 - A booking's sale status and its operational/project status are tracked
   independently — do not merge them into one field.
@@ -634,9 +869,9 @@ it) or restock in bulk from reorder points. The schema supports both because
   table.
 - `transport_fee` is always admin-entered per booking; do not build automatic
   distance/zone-based calculation for this phase.
-- Invoices are frozen records: line items, totals, company name and bank
-  account are copied into the invoice when it is issued. Later changes to
-  prices, items or company settings never alter an issued invoice.
+- Invoices are frozen records: line items, totals, company name, bank account
+  and customer details are copied into the invoice when it is issued. Later
+  changes to prices, items or company settings never alter an issued invoice.
 - Invoice access for customers is by `access_token` only, and public clients
   never get a general select permission on `invoices` or `bookings`.
 - `company_profile` holds one row only.
@@ -644,5 +879,25 @@ it) or restock in bulk from reorder points. The schema supports both because
   later; bookings made before the field existed stay empty.
 - Procurement never edits stock directly. Receiving goods always goes through
   `stock_movements`.
-- Suppliers (goods you buy) and vendors (services/property you source for an
-  event) are separate tables and separate admin screens.
+- Invoices: several per booking — `dp` and `final`, at most one non-void of
+  each (section 9). Issued invoices are frozen; the correction path is void
+  and reissue. Paid amount and balance due are calculated from the ledger's
+  `in` rows for each invoice, never stored on the invoice.
+- The ledger (`transactions`) is append-only; mistakes are fixed with reversing
+  rows. Customer payments, supplier payments, helper pay and every other
+  money movement live in this one table.
+- Transactions that carry a `purchase_order_id` are excluded from event
+  margin, because material cost already enters through
+  `booking_items.unit_cost`.
+- `item_variants.cost_price`, `booking_items.unit_cost` and
+  `products.vendor_price` are internal and must never be readable by public
+  clients. Where a table has public read access, protect these columns with
+  column-level grants and list public columns explicitly in public queries
+  (see the PostgREST caveat in section 5).
+- Staff are warned about, never blocked, when double-booked on the same date.
+- Suppliers (goods you buy), vendors (services/property you source for an
+  event) and staff (people you pay) are separate tables and separate admin
+  screens.
+- Plan status and line execution status come from linked purchase orders and
+  ledger rows; they are not retyped by hand, except `done_at` for lines with no
+  supplier.

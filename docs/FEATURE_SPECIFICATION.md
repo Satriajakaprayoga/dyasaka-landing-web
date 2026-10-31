@@ -13,13 +13,7 @@ behavior, flow, and what each screen/feature needs to do.
 > Paket"), booking item snapshots with `transport_fee` + custom bookings,
 > DP-received → auto checklist → 3-phase workflow with manual project status,
 > and the dashboard operational views
-> (`supabase/migrations/20261020120000_booking_workflow.sql`). Company
-> settings (§8) and invoices (§9) are implemented
-> (`20261021090000_company_settings.sql`,
-> `20261021100000_invoices.sql`, `20261024090000_invoice_partially_paid.sql`);
-> §6 vendors shipped as a master table plus the product relation
-> (`products.vendor_id` + vendor price/margin + the invoice picker
-> "Vendor" group — see §6). The spec is
+> (`supabase/migrations/20261020120000_booking_workflow.sql`). The spec is
 > kept as written; differences from reality are noted inline.
 
 ---
@@ -171,8 +165,9 @@ For each row in the booking's `booking_items`:
   item (e.g. "confirm venue address", "call customer to confirm arrival
   time") — these have `booking_item_id` left empty
 
-Vendors are **not** part of checklist generation — booking items reference
-inventory only; vendors attach to products, not bookings (see section 6).
+Vendors (`booking_vendors`) are **not** part of checklist generation — they
+have their own status field (`pending`/`confirmed`/`cancelled`) and are
+tracked separately. Do not generate `checklist_items` rows for vendors.
 
 ### Stock-check phase (screen/behavior)
 
@@ -237,6 +232,12 @@ checked_out`, across all active bookings
 - **Orders awaiting delivery** — purchase orders with status `ordered` or
   `partially_received`
 - **Bookings by source** — count of bookings per `source` (see section 10)
+- **Helpers assigned this week** — `booking_staff` rows for upcoming bookings
+  that are not cancelled, with a warning where a person is double-booked
+- **Cash this month** — money in, money out and net from the ledger (see
+  section 13)
+- **Plans not yet executed** — purchase plans that are `approved` or
+  `in_progress` (see section 16)
 
 These views are intended to be the admin's day-to-day task list and should be
 visible on the main admin dashboard, not buried inside individual booking
@@ -244,43 +245,29 @@ pages.
 
 ---
 
-## 6. Admin — Vendor Management — **Implemented (redesigned)**
+## 6. Admin — Vendor Management (new)
 
-> The spec below was originally written as `vendors` + `vendor_services` +
-> `booking_vendors`. An Oct 2026 attempt implemented vendor → items
-> (`items.vendor_id` + a `service` item type) and was **reverted** —
-> inventory items are too heavy for vendor offerings, which "just need
-> information like a product". The agreed model going forward:
->
-> - **`vendors`** master table — built (name, phone, note, `is_active`;
->   admin-only RLS; `/admin/vendors` CRUD page).
-> - **`products.vendor_id`** — the vendor relation lives on the existing
->   products table (nullable FK), **not** on inventory items. A vendor's
->   offerings are plain product rows — simpler than items, no
->   variants/stock.
-> - **Vendor price + margin** — products gain a vendor price (cost)
->   column; margin = product price − vendor price, always computed,
->   never hand-entered. Admin-only — the customer invoice never sees
->   cost or margin.
-> - **Invoice integration** — the invoice draft's catalog picker gains a
->   "Vendor" group fed by vendor products (line starts at selling price,
->   admin adjusts to the negotiated price, `source_type 'vendor'`).
->   Vendor products do not enter booking items or the checklist.
-> - No `vendor_services` / `booking_vendors` tables.
+### Vendor master data
 
-### Vendor master data (as implemented)
+- Create/edit `vendors` — name, `vendor_category` (plain string, e.g.
+  "Clown", "Photographer"), phone, address, social media, notes
+- Create/edit `vendor_services` under a vendor — optional predefined
+  offerings with a reference price; a vendor does not require any services
+  defined to be bookable
 
-- `/admin/vendors` CRUD — create/edit/delete vendors (name, phone, note,
-  is_active); deletion is never blocked (`products.vendor_id` is
-  `ON DELETE SET NULL` — linked products just lose their vendor)
-- Product form — Vendor select (optional; inactive vendors suffixed
-  "(nonaktif)") + Harga Vendor (cost) with a live computed margin hint;
-  the products list shows `vendor Rp X · margin Rp Y` under the price
-  when set (20261025100000)
-- Invoice draft picker — "Vendor" optgroups (one per vendor, active
-  vendor products only) insert a line at the selling price,
-  `source_type 'vendor'`; vendor products never enter booking items or
-  the checklist
+### Adding a vendor to a booking
+
+- From a booking, admin adds a `booking_vendors` row — selecting a vendor,
+  optionally a predefined `vendor_service`, and entering the `agreed_price`
+  actually negotiated for this event (independent of the service's reference
+  price)
+- **Double-booking check:** before confirming, check whether the same vendor
+  already has another `confirmed` `booking_vendors` row on the same
+  `event_date`. If so, show a warning banner to the admin — this does not
+  block the action; the admin has final say (the vendor may genuinely be able
+  to cover both events)
+- Vendor status (`pending`/`confirmed`/`cancelled`) is tracked independently
+  of the booking's own sales status and `project_status`
 
 ---
 
@@ -331,25 +318,30 @@ also needs rented chairs/tables and a location-dependent transport cost.
 
 ### Admin side
 
-- From a booking, the admin creates an invoice. The lines are prefilled as
-  copies: the package product first (when the booking has one, at its catalog
-  price), then the booking's items priced at the **live catalog price** at
-  creation time, plus the transport fee when set; vendor lines are added by
-  hand when needed. The draft editor also has a **catalog picker** (grouped
-  by item category, like the booking item picker) for adding further lines,
-  and the admin can edit, remove or add custom lines before issuing
+- From a booking, the admin creates an invoice. The lines are prefilled from
+  the booking's items (as frozen copies) plus the transport fee when set;
+  vendor lines are added by hand when needed. The admin can edit, remove or
+  add custom lines before issuing
 - Choose which active bank account is shown on the invoice
-- Issuing the invoice assigns the invoice number and copies the company name
-  and chosen bank account into the invoice
-- Statuses: `draft`, `issued`, `partially_paid`, `paid`, `void` — an
-  editable-until-paid model (see Decisions). Issued and partially-paid
-  invoices stay editable (lines, due date, notes, bank account) so mistakes
-  can be corrected after the link was already sent; `paid` and `void` are
-  read-only
+- Issuing the invoice assigns the invoice number, freezes all lines and
+  totals, and copies the company name and chosen bank account into the invoice
+- Statuses: `draft` (editable, not visible to customers), `issued`, `paid`,
+  `void`. An issued invoice cannot be edited; to correct it, void it and create
+  a new one
 - The admin gets the invoice link to send to the customer over WhatsApp
-- Recording a payment (for example the down payment) updates `amount_paid`
-  and `balance_due`; the status follows the money automatically — money in
-  but not settled → `partially_paid`, settled → `paid`
+- A booking can have several invoices: first a **deposit invoice** with one
+  line (the deposit amount, typed by the admin, optionally prefilled from a
+  percentage), later one **final invoice**. Items added to the booking after
+  the deposit are not billed until the final invoice
+- Recording a customer payment creates an `in` transaction in the ledger
+  linked to the booking and the invoice (see section 13). Paid amount and
+  balance are calculated from those rows; they are not typed onto the invoice
+- The final invoice draft is prefilled with every current booking line and
+  shows the total, the payments already received (including the deposit) and
+  the remaining balance
+- If items are added after the final invoice was issued, the admin voids it
+  and issues a new final invoice. The old link then shows a short "replaced"
+  notice pointing to the current invoice
 
 ### Customer side
 
@@ -362,31 +354,31 @@ also needs rented chairs/tables and a location-dependent transport cost.
   invoice data, no PDF files are stored
 - A wrong or unknown link shows a plain "not found" page and reveals nothing
   about other invoices
-- Draft and void invoices are not viewable through the public link
+- Draft invoices are not viewable through the public link. A void invoice
+  shows only a short "replaced by a newer invoice" notice with a link to the
+  booking's current invoice, and no amounts
+- When the team has finished setup, the customer opens the final invoice link
+  to see exactly how much is left to pay
 
 ### Decisions (recorded)
 
-- **One invoice per booking.** `invoices.booking_id` is UNIQUE; the down
-  payment is recorded as a payment (`amount_paid`) against that single
-  invoice rather than as a separate DP invoice.
-- **Editable until paid.** `draft`, `issued` and `partially_paid` are fully
-  editable — lines, due date, notes and bank account; saving recomputes
-  totals and re-derives the status from the payment math (`partially_paid`
-  is system-derived only, never chosen by hand). `paid` is strictly
-  read-only — no void, no payment reversal (a wrongly recorded final payment
-  can only be fixed by direct DB edit; accepted). `void` is read-only and
-  reachable only from `issued` / `partially_paid`. Deleting is draft-only,
-  so issued invoices keep their token links alive — void is the correction
-  path after issue.
+- **Several invoices per booking.** `invoices.booking_id` is not unique. Each
+  invoice has an `invoice_type` (`dp` or `final`), and a booking may have at
+  most one non-void invoice of each type. A wrong issued invoice is voided and
+  replaced; the voided number is never reused. This supersedes the earlier
+  one-invoice-per-booking decision.
+- Paid amount and balance due are calculated from the ledger, not stored on the
+  invoice, so an issued invoice stays frozen while payments change.
+- Invoices snapshot the customer name, phone, event address and event date at
+  issue.
 - Invoice numbers follow `INV/YYYY/MM/NNNN` (per-month sequence, zero-padded,
-  assigned at issue; concurrent issues retry on the unique constraint; voided
-  numbers are never reused).
+  assigned at issue; concurrent issues retry on the unique constraint).
 - PDFs come from the browser print dialog, not a PDF library.
-- Draft lines are prefilled with the package product line, booking items at
-  live catalog prices (falling back to the booking's frozen price when the
-  variant is gone), and transport; further lines come from the draft editor's
-  catalog picker or are typed by hand (vendor lines); drafts never
-  auto-resync when the booking or catalog changes afterwards.
+- Draft lines are only prefilled from booking items + transport; vendor
+  lines are typed by the admin when needed, and drafts never auto-resync
+  when the booking changes afterwards.
+- **Open:** whether the deposit is a fixed percentage of the total or typed
+  freely each time.
 
 ---
 
@@ -458,7 +450,125 @@ the same tables; the decision affects which screen is the main entry point.
 
 ---
 
-## 12. Explicitly out of scope for this phase
+## 12. Admin — Staff and Helper Planning (new)
+
+### Staff list
+
+- Create and edit staff: name, phone, role, an informational pay basis
+  (monthly, weekly, per event) and an active flag. Permanent staff and event
+  helpers are the same kind of record
+- Keep this list separate from vendors and suppliers in the admin navigation
+
+### Planning helpers for an event
+
+- From a booking, the admin assigns staff: choose the person, the role on this
+  event and the planned pay. This works like adding a vendor to a booking
+- If the same person already has another non-cancelled assignment on the same
+  event date, show a warning banner. It never blocks the admin
+- Assignments have a status: `planned`, `confirmed`, `cancelled`
+- The booking page shows the expected helper cost (planned pay of
+  non-cancelled assignments) next to the actual amount paid
+- Paying a helper is done from the assignment: it opens the expense form
+  prefilled with the person, the booking and the planned pay; saving creates an
+  `out` transaction (see section 13). Whether an assignment is paid is shown
+  from the ledger rows, not typed by hand
+
+---
+
+## 13. Admin — Cashflow Ledger (new)
+
+- One screen to record every money movement: direction, amount, date,
+  category, account (cash or a bank), description, and optional links to a
+  booking, invoice, purchase order, staff member, vendor or plan line
+- Customer payments are recorded here (or from the invoice page shortcut),
+  linked to the booking and the invoice they were paid against
+- Expenses are recorded here too: gasoline, helper pay, salary, vendor
+  payments, goods purchases, repairs
+- Weekly or monthly salary uses the optional period fields so the admin can
+  see which period a payment covered. Per-event helper pay needs only the
+  booking link
+- Rows are never edited or deleted. A mistake is corrected with a "reverse"
+  action that adds a reversing row, after which the admin enters the correct
+  one
+- The list can be filtered by month, category, account and booking, and shows
+  money in, money out and net for the filter
+- Transaction categories are managed in a small settings list (name and
+  direction). New categories can be added; used ones can be deactivated, not
+  deleted
+
+---
+
+## 14. Admin — Margin per Event (new)
+
+- On each booking, a margin panel shows **expected** and **actual** side by
+  side:
+  - Revenue: expected from the final invoice (or booking total), actual from
+    received payments
+  - Costs: materials (consumable quantity times the cost snapshot), vendors,
+    helpers, and other event expenses linked to the booking
+  - Margin: revenue minus costs
+- Expected costs before the event use the vendor cost price and the planned
+  helper pay, so the admin can judge a booking's profitability before it
+  happens
+- Transactions that are goods-purchase payments linked to a purchase order are
+  not counted in event margin, because material cost already enters through
+  the item cost snapshot. They appear in cashflow only
+- Fixed salaries and rent are not part of event margin unless the admin links
+  a payment to a booking
+- A list view ranks recent events by margin
+- Cost data is admin-only and never visible on public pages or invoices
+
+---
+
+## 15. Admin — Monthly Cashflow Report (new)
+
+- Money in, money out and net per month, grouped by transaction category, with
+  an optional account filter
+- Uses the date the money moved. The period fields on salary rows are kept so
+  a period-based view can be added later
+- Read-only; built entirely from the ledger
+
+---
+
+## 16. Admin — Purchase Plans (new)
+
+### Creating a plan
+
+- A plan has a title, a type (`buy`, `create`, `fix`, `rnd`, `upgrade`), a
+  reason, an optional target date, an optional budget and an optional linked
+  booking
+- Plans can be started from three places: the shortfall list (add to plan), a
+  booking's `need_order` row, or from scratch for repairs, tools, R&D and
+  upgrades
+- Lines are free text with an optional catalog item. Each line has a
+  quantity, an estimated unit cost, an optional supplier, and for upgrades the
+  item being replaced
+
+### Following execution
+
+- Statuses: `draft` → `approved` → `in_progress` → `done`, or `cancelled`
+- An approved plan's lines are turned into purchase orders, grouped by
+  supplier. Each plan line stays linked to its order line, so the plan shows
+  which lines are not executed, ordered, or done
+- Lines that involve no supplier (an in-house repair, something the team
+  builds) are marked done by hand, and their cost is entered as an expense in
+  the ledger linked to the plan line
+- The plan page shows estimated cost against actual cost, taken from order
+  lines and linked ledger rows
+- Plan status moves automatically as lines are linked and completed;
+  cancelling is manual
+
+### R&D and upgrades
+
+- For `rnd` plans, each line records an outcome (`testing`, `adopted`,
+  `rejected`) and a short note. When a line is adopted, the admin creates the
+  real item and variant and the line is pointed at it
+- For `upgrade` plans, retiring the replaced units is a normal stock
+  adjustment, so the stock ledger stays accurate
+
+---
+
+## 17. Explicitly out of scope for this phase
 
 - ~~Customer-facing booking form~~ — **built since the spec was written**: the
   product-page modal inserts a `pending` booking directly via the public RLS
@@ -472,16 +582,12 @@ the same tables; the decision affects which screen is the main entry point.
 - Purchase order automation from "needs ordering" flags
 - Multi-day / date-range bookings (current model assumes a single
   `event_date` per booking)
-- Profit margin reporting (unit cost is recorded on purchase order lines only,
-  nothing computes margins yet)
+- Payroll calculation (tax, deductions, payslips): staff pay is recorded as
+  ledger rows only
+- Double-entry accounting, tax reports, depreciation of rentable items
+- Bank statement import or reconciliation
 - Automatic/zone-based transportation fee calculation
-- ~~Hard-blocking vendor double-booking (warning only, per section 6)~~ —
-  obsolete: vendors no longer attach to bookings at all; only rentable
-  inventory gets the same-date availability warning via the booking items
-  panel
-- Per-vendor margin **reporting/rollups** — the per-product margin
-  (price − vendor price) is in scope, but profit reports across
-  bookings/vendors stay out of this phase
+- Hard-blocking vendor double-booking (warning only, per section 6)
 - Automatic reordering or supplier price comparison
 - Online payment inside the invoice page (the invoice only shows bank details)
 - Customer accounts or logins (invoice access is by private link only)
