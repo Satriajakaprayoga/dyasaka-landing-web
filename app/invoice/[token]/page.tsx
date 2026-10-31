@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { CompanyProfile, Invoice, InvoiceItem, InvoiceStatus } from "@/lib/types";
 import {
   InvoiceStatusBadge,
+  btnPrimary,
   formatDate,
   formatRupiah,
 } from "@/components/admin/ui";
@@ -20,17 +21,33 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-type InvoiceRpc = {
-  invoice: Omit<Invoice, "access_token">;
-  items: InvoiceItem[];
-  booking: {
-    customer_name: string;
-    phone: string;
-    event_date: string;
-    event_address: string;
-    theme: string | null;
-  };
-};
+// The RPC answers three ways (20261101100000_invoice_multi.sql):
+//   issued/paid → the full invoice; amount_paid/balance_due computed
+//     from ledger `in` rows, bill-to fields prefer issue snapshots.
+//   void        → slim "replaced" payload, no amounts, plus the
+//     current (non-void) invoice's token when one exists.
+//   draft/unknown → null (renders the same 404 as any bad link).
+type InvoiceRpc =
+  | {
+      replaced: false;
+      invoice: Omit<Invoice, "access_token"> & {
+        amount_paid: number;
+        balance_due: number;
+      };
+      items: InvoiceItem[];
+      booking: {
+        customer_name: string;
+        phone: string;
+        event_date: string;
+        event_address: string;
+        theme: string | null;
+      };
+    }
+  | {
+      replaced: true;
+      invoice_number: string | null;
+      current_token: string | null;
+    };
 
 export default async function PublicInvoicePage(props: {
   params: Promise<{ token: string }>;
@@ -53,6 +70,36 @@ export default async function PublicInvoicePage(props: {
   const data = (rpcRes.data ?? null) as InvoiceRpc | null;
   if (!data) {
     notFound();
+  }
+
+  // A voided invoice's old link must never 404 (customers bookmark and
+  // print these) — it points to the replacement instead. No amounts,
+  // so a stale printed total can't be confused with a live one.
+  if (data.replaced) {
+    return (
+      <main className="min-h-screen bg-gray-100 px-4 py-10">
+        <div className="mx-auto max-w-md">
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-lg font-semibold text-gray-900">
+              Invoice telah digantikan
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              {data.invoice_number
+                ? `Invoice ${data.invoice_number} sudah dibatalkan dan digantikan oleh invoice yang lebih baru.`
+                : "Invoice ini sudah dibatalkan dan digantikan oleh invoice yang lebih baru."}
+            </p>
+            {data.current_token && (
+              <a
+                href={`/invoice/${data.current_token}`}
+                className={btnPrimary + " mt-6 inline-block"}
+              >
+                Lihat Invoice Terbaru
+              </a>
+            )}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   const { invoice, items, booking } = data;
@@ -94,7 +141,7 @@ export default async function PublicInvoicePage(props: {
             </div>
             <div className="text-right">
               <p className="text-sm font-semibold uppercase tracking-wide text-gray-400">
-                Invoice
+                {invoice.invoice_type === "dp" ? "Invoice DP" : "Invoice"}
               </p>
               {invoice.invoice_number && (
                 <p className="text-sm font-medium text-gray-900">

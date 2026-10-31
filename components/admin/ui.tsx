@@ -1,6 +1,8 @@
 import type {
   BookingStatus,
   InvoiceStatus,
+  PlanStatus,
+  PlanType,
   ProjectStatus,
   RentalStatus,
 } from "@/lib/types";
@@ -189,7 +191,6 @@ const invoiceStatusMap: Record<InvoiceStatus, { label: string; tone: BadgeTone }
   {
     draft: { label: "Draft", tone: "gray" },
     issued: { label: "Terbit", tone: "blue" },
-    partially_paid: { label: "Bayar Sebagian", tone: "amber" },
     paid: { label: "Lunas", tone: "green" },
     void: { label: "Dibatalkan", tone: "red" },
   };
@@ -197,6 +198,31 @@ const invoiceStatusMap: Record<InvoiceStatus, { label: string; tone: BadgeTone }
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const s = invoiceStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
   return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+const planStatusMap: Record<PlanStatus, { label: string; tone: BadgeTone }> = {
+  draft: { label: "Draft", tone: "gray" },
+  approved: { label: "Disetujui", tone: "blue" },
+  in_progress: { label: "Berjalan", tone: "amber" },
+  done: { label: "Selesai", tone: "green" },
+  cancelled: { label: "Dibatalkan", tone: "red" },
+};
+
+export function PlanStatusBadge({ status }: { status: PlanStatus }) {
+  const s = planStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+const planTypeLabels: Record<PlanType, string> = {
+  buy: "Beli Barang",
+  create: "Buat Baru",
+  fix: "Perbaikan",
+  rnd: "Riset",
+  upgrade: "Upgrade",
+};
+
+export function PlanTypeBadge({ type }: { type: PlanType }) {
+  return <Badge tone="gray">{planTypeLabels[type] ?? type}</Badge>;
 }
 
 export function EmptyState({

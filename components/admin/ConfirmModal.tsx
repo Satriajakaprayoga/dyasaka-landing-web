@@ -12,6 +12,8 @@ type Props = {
   /** Impact list — blocker/cascade lines, rendered in a bordered box. */
   children?: React.ReactNode;
   confirmLabel?: string;
+  /** Busy-state text on the confirm button (defaults to "Menghapus…"). */
+  busyLabel?: string;
   busy?: boolean;
   /** Disables the confirm button (e.g. RESTRICT blockers found). */
   disabled?: boolean;
@@ -27,6 +29,7 @@ export default function ConfirmModal({
   description,
   children,
   confirmLabel = "Hapus",
+  busyLabel = "Menghapus…",
   busy = false,
   disabled = false,
   onConfirm,
@@ -100,7 +103,7 @@ export default function ConfirmModal({
             title={disabled ? "Tidak dapat dihapus" : undefined}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Menghapus…" : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </div>

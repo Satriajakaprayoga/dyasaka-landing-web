@@ -67,6 +67,10 @@ type Props = {
   vendorProducts: VendorProductRef[];
   companyName: string | null;
   logoUrl: string | null;
+  /** Ledger-derived: Σ `in` transactions carrying this invoice. */
+  initialPaid: number;
+  /** Ledger-derived: Σ `in` transactions for the whole booking (DP etc). */
+  bookingPaid: number;
 };
 
 export default function InvoiceManager({
@@ -78,11 +82,16 @@ export default function InvoiceManager({
   vendorProducts,
   companyName,
   logoUrl,
+  initialPaid,
+  bookingPaid,
 }: Props) {
   const router = useRouter();
 
   const [invoice, setInvoice] = useState(initialInvoice);
   const [items, setItems] = useState(initialItems);
+  // Paid/balance are calculated from the ledger — never stored on the
+  // invoice — so the manager carries them as plain state.
+  const [paid, setPaid] = useState(initialPaid);
 
   const [lines, setLines] = useState<EditableLine[]>(() =>
     toEditableLines(initialItems),
@@ -91,11 +100,13 @@ export default function InvoiceManager({
   const [notes, setNotes] = useState(initialInvoice.notes ?? "");
   const [bankId, setBankId] = useState(initialInvoice.bank_account_id ?? "");
 
+  const balance = Math.max(Number(invoice.total) - paid, 0);
+
   const [paymentAmount, setPaymentAmount] = useState(() =>
-    initialInvoice.status === "issued" ||
-    initialInvoice.status === "partially_paid"
-      ? String(initialInvoice.balance_due)
-      : "",
+    initialInvoice.status === "issued" && balance > 0 ? String(balance) : "",
+  );
+  const [paymentDate, setPaymentDate] = useState(
+    () => new Date().toISOString().slice(0, 10),
   );
 
   const [origin, setOrigin] = useState("");
@@ -110,14 +121,8 @@ export default function InvoiceManager({
   }, []);
 
   const isDraft = invoice.status === "draft";
-  // Editable-until-paid: draft/issued/partially_paid share the line
-  // editor; paid/void are strictly read-only.
-  const isEditable =
-    isDraft ||
-    invoice.status === "issued" ||
-    invoice.status === "partially_paid";
-  const isPayable =
-    invoice.status === "issued" || invoice.status === "partially_paid";
+  const isIssued = invoice.status === "issued";
+  const isVoid = invoice.status === "void";
 
   const publicLink = `${origin}/invoice/${invoice.access_token}`;
 
@@ -250,7 +255,12 @@ export default function InvoiceManager({
   async function patchAction(
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<{ invoice?: Invoice; items?: InvoiceItem[] } | null> {
+  ): Promise<{
+    invoice?: Invoice;
+    items?: InvoiceItem[];
+    paid?: number;
+    balance_due?: number;
+  } | null> {
     setBusy(true);
     setError(null);
 
@@ -269,6 +279,7 @@ export default function InvoiceManager({
 
       const body = await res.json();
       if (body.invoice) setInvoice(body.invoice);
+      if (typeof body.paid === "number") setPaid(body.paid);
       if (body.items) {
         setItems(body.items);
         setLines(toEditableLines(body.items));
@@ -284,20 +295,18 @@ export default function InvoiceManager({
   }
 
   async function saveLines() {
-    const saved = await patchAction("save-lines", {
+    await patchAction("save-lines", {
       lines: parsedLines,
       due_date: dueDate || null,
       notes: notes || null,
       bank_account_id: bankId || null,
     });
-    // Edited totals change the balance — keep the payment input honest.
-    if (saved?.invoice) setPaymentAmount(String(saved.invoice.balance_due));
   }
 
   async function issue() {
     if (
       !confirm(
-        "Terbitkan invoice? Nomor invoice akan ditetapkan dan tautan pembayaran bisa dikirim ke pelanggan. Baris masih bisa dikoreksi setelah terbit.",
+        "Terbitkan invoice? Nomor akan ditetapkan dan SEMUA baris serta total menjadi permanen (tidak bisa diedit). Untuk koreksi setelah terbit, invoice harus dibatalkan dan diterbitkan ulang.",
       )
     )
       return;
@@ -315,8 +324,9 @@ export default function InvoiceManager({
   async function recordPayment() {
     const body = await patchAction("record-payment", {
       amount: Number(paymentAmount),
+      transaction_date: paymentDate,
     });
-    if (body?.invoice) setPaymentAmount(String(body.invoice.balance_due));
+    if (body?.invoice) setPaymentAmount("");
   }
 
   async function voidInvoice() {
@@ -355,6 +365,13 @@ export default function InvoiceManager({
     }
   }
 
+  // Final draft: show what the customer already paid across the booking
+  // (deposit included) and what remains after this invoice.
+  const remainingAfterThis =
+    invoice.invoice_type === "final"
+      ? Math.max(Number(invoice.total) - bookingPaid, 0)
+      : null;
+
   return (
     <div className="space-y-6">
       {error && (
@@ -380,8 +397,10 @@ export default function InvoiceManager({
                 {invoice.company_name_snapshot ?? companyName ?? "—"}
               </p>
               <p className="text-xs text-gray-500">
-                Untuk: {booking.customer_name} · Acara{" "}
-                {formatDate(booking.event_date)}
+                {invoice.invoice_type === "dp" ? "Invoice DP" : "Invoice Final"}{" "}
+                · Untuk: {invoice.customer_name_snapshot ?? booking.customer_name}{" "}
+                · Acara{" "}
+                {formatDate(invoice.event_date_snapshot ?? booking.event_date)}
               </p>
             </div>
           </div>
@@ -397,17 +416,11 @@ export default function InvoiceManager({
         </div>
       </Card>
 
-      {isEditable && (
+      {isDraft && (
         <Card className="p-5">
           <h2 className="mb-4 text-base font-semibold text-gray-900">
             Baris Invoice
           </h2>
-          {!isDraft && (
-            <p className="-mt-2 mb-4 text-xs text-gray-400">
-              Invoice sudah terbit — baris masih bisa dikoreksi. Total dan
-              status menyesuaikan pembayaran tercatat.
-            </p>
-          )}
 
           <div className="space-y-2">
             {lines.map((line, i) => (
@@ -550,77 +563,56 @@ export default function InvoiceManager({
               <span className="text-base font-semibold text-gray-900">
                 {formatRupiah(subtotal)}
               </span>
-              {!isDraft && (
+              {remainingAfterThis != null && (
                 <span className="mt-0.5 block text-xs">
-                  Dibayar {formatRupiah(Number(invoice.amount_paid))} · Sisa{" "}
+                  Sudah diterima dari pelanggan (termasuk DP):{" "}
+                  {formatRupiah(bookingPaid)} · Sisa setelah invoice ini{" "}
                   <span className="font-semibold text-gray-900">
-                    {formatRupiah(Number(invoice.balance_due))}
+                    {formatRupiah(remainingAfterThis)}
                   </span>
                 </span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {isDraft ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={busy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Hapus Draft
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveLines}
-                    disabled={busy || hasLineIssues}
-                    className={btnSecondary}
-                  >
-                    {busy ? "…" : "Simpan Draft"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={issue}
-                    disabled={
-                      busy || hasLineIssues || lines.length === 0 || !bankId
-                    }
-                    title={
-                      lines.length === 0
-                        ? "Tambahkan minimal satu baris"
-                        : !bankId
-                          ? "Pilih rekening bank"
-                          : undefined
-                    }
-                    className={btnPrimary}
-                  >
-                    Terbitkan
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={saveLines}
-                  disabled={
-                    busy || hasLineIssues || lines.length === 0 || !bankId
-                  }
-                  title={
-                    lines.length === 0
-                      ? "Invoice terbit minimal memiliki satu baris"
-                      : !bankId
-                        ? "Pilih rekening bank"
-                        : undefined
-                  }
-                  className={btnPrimary}
-                >
-                  {busy ? "…" : "Simpan Perubahan"}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Hapus Draft
+              </button>
+              <button
+                type="button"
+                onClick={saveLines}
+                disabled={busy || hasLineIssues}
+                className={btnSecondary}
+              >
+                {busy ? "…" : "Simpan Draft"}
+              </button>
+              <button
+                type="button"
+                onClick={issue}
+                disabled={
+                  busy || hasLineIssues || lines.length === 0 || !bankId
+                }
+                title={
+                  lines.length === 0
+                    ? "Tambahkan minimal satu baris"
+                    : !bankId
+                      ? "Pilih rekening bank"
+                      : undefined
+                }
+                className={btnPrimary}
+              >
+                Terbitkan
+              </button>
             </div>
           </div>
         </Card>
       )}
 
-      {!isEditable && (
+      {!isDraft && (
         <>
           <Card className="overflow-hidden">
             <table className="w-full text-sm">
@@ -670,26 +662,29 @@ export default function InvoiceManager({
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Dibayar</span>
-                <span className="tabular-nums">
-                  {formatRupiah(Number(invoice.amount_paid))}
-                </span>
+                <span className="tabular-nums">{formatRupiah(paid)}</span>
               </div>
               <div className="flex justify-between text-base font-semibold text-gray-900">
                 <span>Sisa Tagihan</span>
-                <span className="tabular-nums">
-                  {formatRupiah(Number(invoice.balance_due))}
-                </span>
+                <span className="tabular-nums">{formatRupiah(balance)}</span>
               </div>
             </div>
+            {isIssued && (
+              <p className="border-t border-gray-200 px-4 py-3 text-xs text-gray-400">
+                Invoice terbit bersifat permanen — baris dan total tidak bisa
+                diedit. Koreksi: batalkan (void), lalu terbitkan ulang dari
+                halaman booking.
+              </p>
+            )}
           </Card>
 
-          {isPayable && (
+          {isIssued && (
             <Card className="p-5">
               <h2 className="mb-4 text-base font-semibold text-gray-900">
                 Pembayaran &amp; Pengiriman
               </h2>
 
-              {Number(invoice.balance_due) > 0 ? (
+              {balance > 0 ? (
                 <div className="mb-4 flex flex-wrap items-end gap-2">
                   <div>
                     <label htmlFor="payment" className={labelClass}>
@@ -699,11 +694,23 @@ export default function InvoiceManager({
                       id="payment"
                       type="number"
                       min={0.01}
-                      max={Number(invoice.balance_due)}
+                      max={balance}
                       step={0.01}
                       value={paymentAmount}
                       onChange={(e) => setPaymentAmount(e.target.value)}
                       className={inputClass + " w-48"}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="payment_date" className={labelClass}>
+                      Tanggal
+                    </label>
+                    <input
+                      id="payment_date"
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className={inputClass + " w-40"}
                     />
                   </div>
                   <button
@@ -712,7 +719,7 @@ export default function InvoiceManager({
                     disabled={
                       busy ||
                       !(Number(paymentAmount) > 0) ||
-                      Number(paymentAmount) > Number(invoice.balance_due)
+                      Number(paymentAmount) > balance
                     }
                     className={btnPrimary}
                   >
@@ -724,6 +731,10 @@ export default function InvoiceManager({
                   Invoice sudah lunas.
                 </p>
               )}
+              <p className="mb-4 -mt-2 text-xs text-gray-400">
+                Pembayaran tercatat sebagai transaksi masuk di Buku Kas —
+                dibayar dan sisa dihitung dari sana.
+              </p>
 
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <input
@@ -748,19 +759,33 @@ export default function InvoiceManager({
                   Kirim via WhatsApp
                 </a>
               </div>
-              <p className="mb-4 text-xs text-gray-400">
-                Tautan bisa dibuka pelanggan tanpa login selama invoice belum
-                dibatalkan.
-              </p>
 
               <button
                 type="button"
                 onClick={() => setConfirmVoid(true)}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
               >
                 <TrashIcon className="h-3.5 w-3.5" />
                 Batalkan Invoice
+              </button>
+            </Card>
+          )}
+
+          {isVoid && (
+            <Card className="p-5">
+              <p className="text-sm text-gray-600">
+                Invoice ini dibatalkan. Tautan lama pelanggan menampilkan
+                pemberitahuan pengganti. Terbitkan invoice pengganti dari
+                halaman booking — pembayaran yang salah bisa dibalikkan di
+                Buku Kas.
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push(`/admin/bookings/${booking.id}`)}
+                className={btnSecondary + " mt-3"}
+              >
+                Ke Halaman Booking
               </button>
             </Card>
           )}
@@ -779,12 +804,18 @@ export default function InvoiceManager({
       <ConfirmModal
         open={confirmVoid}
         title="Batalkan invoice ini?"
-        description="Invoice batal tidak bisa dilihat pelanggan dan tidak bisa diubah lagi. Nomor tidak dipakai ulang; buat invoice tidak bisa dilakukan karena satu booking hanya punya satu invoice."
+        description="Tautan pelanggan hanya menampilkan pemberitahuan pengganti. Nomor tidak dipakai ulang."
         confirmLabel="Batalkan Invoice"
         busy={busy}
         onConfirm={voidInvoice}
         onClose={() => setConfirmVoid(false)}
-      />
+      >
+        <p className="text-gray-600">
+          Invoice pengganti diterbitkan dari halaman booking setelah ini.
+          {paid > 0 &&
+            ` Pembayaran ${formatRupiah(paid)} yang sudah tercatat tetap ada di Buku Kas — balikkan di sana bila salah.`}
+        </p>
+      </ConfirmModal>
     </div>
   );
 }

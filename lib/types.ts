@@ -86,6 +86,8 @@ export type ItemVariant = {
   sku: string | null;
   stock_quantity: number;
   current_price: number;
+  // Internal — what one unit costs the business; margin reports only.
+  cost_price: number | null;
   reorder_point: number | null;
 };
 
@@ -130,6 +132,9 @@ export type BookingItem = {
   item_variant_id: string;
   quantity: number;
   unit_price: number;
+  // Frozen at creation from item_variants.cost_price; consumables
+  // only — rentables carry no per-event material cost.
+  unit_cost: number | null;
   rental_status: RentalStatus | null;
   checked_out_at: string | null;
   returned_at: string | null;
@@ -181,21 +186,21 @@ export type CompanyBankAccount = {
 
 // ---------- Invoices (§9) ----------
 
-// partially_paid is system-derived only (amount_paid > 0 &&
-// balance_due > 0) — the API recomputes it on every write.
-export type InvoiceStatus =
-  | 'draft'
-  | 'issued'
-  | 'partially_paid'
-  | 'paid'
-  | 'void';
+// A booking has several invoices over its life: first a deposit
+// invoice, later the final one. At most one NON-VOID invoice of each
+// type per booking (partial unique index).
+export type InvoiceType = 'dp' | 'final';
+
+// paid is derived from the ledger (balance due reaches zero); issued
+// is frozen — correction means void + reissue.
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void';
 
 export type InvoiceLineSource = 'item' | 'vendor' | 'transport' | 'custom';
 
 export type Invoice = {
   id: string;
-  // Unique — one invoice per booking (DP is a payment against it).
   booking_id: string;
+  invoice_type: InvoiceType;
   invoice_number: string | null;
   access_token: string;
   status: InvoiceStatus;
@@ -203,15 +208,21 @@ export type Invoice = {
   due_date: string | null;
   subtotal: number;
   total: number;
-  amount_paid: number;
-  balance_due: number;
   bank_account_id: string | null;
   company_name_snapshot: string | null;
   bank_account_snapshot: string | null;
+  customer_name_snapshot: string | null;
+  phone_snapshot: string | null;
+  event_address_snapshot: string | null;
+  event_date_snapshot: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// Paid amount and balance due are NOT stored columns — they are
+// calculated from ledger `in` rows (transactions.invoice_id) wherever
+// an invoice is displayed or edited.
 
 export type InvoiceItem = {
   id: string;
@@ -221,5 +232,153 @@ export type InvoiceItem = {
   unit_price: number;
   line_total: number;
   source_type: InvoiceLineSource;
+  sort_order: number;
+};
+
+// ---------- Money ledger (§12) ----------
+
+export type TransactionDirection = 'in' | 'out';
+
+export type TransactionCategory = {
+  id: string;
+  name: string;
+  direction: TransactionDirection;
+  is_active: boolean;
+  sort_order: number;
+};
+
+// Append-only: mistakes are fixed with a reversing row, never edits.
+export type Transaction = {
+  id: string;
+  direction: TransactionDirection;
+  // Always positive; the direction gives the sign.
+  amount: number;
+  transaction_date: string;
+  category_id: string;
+  account: string | null;
+  description: string | null;
+  booking_id: string | null;
+  invoice_id: string | null;
+  purchase_order_id: string | null;
+  plan_line_id: string | null;
+  staff_id: string | null;
+  booking_staff_id: string | null;
+  vendor_id: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  reverses_transaction_id: string | null;
+  created_at: string;
+};
+
+// ---------- Staff & planned helper cost (§13) ----------
+
+export type StaffMember = {
+  id: string;
+  name: string;
+  phone: string | null;
+  role: string | null;
+  // Informational only (e.g. "monthly", "weekly", "per event").
+  pay_basis: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BookingStaffStatus = 'planned' | 'confirmed' | 'cancelled';
+
+export type BookingStaff = {
+  id: string;
+  booking_id: string;
+  staff_id: string;
+  // The role on this event; null falls back to the staff member's own.
+  role: string | null;
+  // The pay agreed BEFORE the event — the expected helper cost.
+  planned_pay: number;
+  status: BookingStaffStatus;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// ---------- Procurement (§11) ----------
+
+export type Supplier = {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'ordered'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export type PurchaseOrder = {
+  id: string;
+  supplier_id: string;
+  booking_id: string | null;
+  status: PurchaseOrderStatus;
+  order_date: string | null;
+  expected_date: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PurchaseOrderItem = {
+  id: string;
+  purchase_order_id: string;
+  item_variant_id: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  unit_cost: number;
+};
+
+// ---------- Purchase plans (§15) ----------
+
+export type PlanType = 'buy' | 'create' | 'fix' | 'rnd' | 'upgrade';
+
+export type PlanStatus =
+  | 'draft'
+  | 'approved'
+  | 'in_progress'
+  | 'done'
+  | 'cancelled';
+
+export type PurchasePlan = {
+  id: string;
+  title: string;
+  plan_type: PlanType;
+  reason: string | null;
+  booking_id: string | null;
+  budget_estimate: number | null;
+  target_date: string | null;
+  status: PlanStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlanLineOutcome = 'testing' | 'adopted' | 'rejected';
+
+export type PurchasePlanLine = {
+  id: string;
+  plan_id: string;
+  item_variant_id: string | null;
+  description: string;
+  quantity: number;
+  estimated_unit_cost: number | null;
+  supplier_id: string | null;
+  purchase_order_item_id: string | null;
+  replaces_item_variant_id: string | null;
+  done_at: string | null;
+  outcome: PlanLineOutcome | null;
+  outcome_note: string | null;
   sort_order: number;
 };

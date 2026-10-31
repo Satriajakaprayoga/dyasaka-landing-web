@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import BottomNav from "./BottomNav";
 import {
   CalendarIcon,
+  ChartIcon,
+  ClipboardIcon,
   DashboardIcon,
   ExternalLinkIcon,
   LayersIcon,
@@ -14,7 +16,10 @@ import {
   PackageIcon,
   SettingsIcon,
   TagIcon,
+  TruckIcon,
+  UserIcon,
   UsersIcon,
+  WalletIcon,
   XIcon,
 } from "./icons";
 
@@ -23,8 +28,13 @@ const navItems = [
   { href: "/admin/products", label: "Produk", icon: PackageIcon },
   { href: "/admin/items", label: "Inventori", icon: LayersIcon },
   { href: "/admin/vendors", label: "Vendor", icon: UsersIcon },
+  { href: "/admin/suppliers", label: "Supplier", icon: TruckIcon },
   { href: "/admin/bookings", label: "Booking", icon: CalendarIcon },
   { href: "/admin/categories", label: "Kategori", icon: TagIcon },
+  { href: "/admin/ledger", label: "Kas", icon: WalletIcon },
+  { href: "/admin/report", label: "Laporan", icon: ChartIcon },
+  { href: "/admin/plans", label: "Rencana", icon: ClipboardIcon },
+  { href: "/admin/staff", label: "Staff", icon: UserIcon },
   { href: "/admin/settings", label: "Pengaturan", icon: SettingsIcon },
 ];
 

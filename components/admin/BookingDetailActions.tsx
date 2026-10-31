@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { InvoiceStatus, ProjectStatus } from "@/lib/types";
+import type { InvoiceStatus, InvoiceType, ProjectStatus } from "@/lib/types";
 import { btnPrimary, btnSecondary, inputClass } from "./ui";
 
 const projectStatusOptions: { value: ProjectStatus; label: string }[] = [
@@ -14,20 +14,24 @@ const projectStatusOptions: { value: ProjectStatus; label: string }[] = [
   { value: "completed", label: "Proyek Selesai" },
 ];
 
+export type InvoiceRef = {
+  id: string;
+  status: InvoiceStatus;
+  invoice_type: InvoiceType;
+};
+
 type Props = {
   bookingId: string;
   dpReceivedAt: string | null;
   projectStatus: ProjectStatus;
-  invoiceId: string | null;
-  invoiceStatus: InvoiceStatus | null;
+  invoices: InvoiceRef[];
 };
 
 export default function BookingDetailActions({
   bookingId,
   dpReceivedAt,
   projectStatus,
-  invoiceId,
-  invoiceStatus,
+  invoices,
 }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -58,7 +62,7 @@ export default function BookingDetailActions({
     }
   }
 
-  async function createInvoice() {
+  async function createInvoice(invoiceType: InvoiceType) {
     setBusy(true);
     setError(null);
 
@@ -66,7 +70,7 @@ export default function BookingDetailActions({
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id: bookingId }),
+        body: JSON.stringify({ booking_id: bookingId, invoice_type: invoiceType }),
       });
 
       if (!res.ok) {
@@ -94,6 +98,16 @@ export default function BookingDetailActions({
 
     void patch({ dp_received_at: new Date().toISOString() });
   }
+
+  // One slot per type: a live (non-void) invoice shows as a link; a
+  // voided one frees the slot for a replacement (void + reissue).
+  const liveByType: Record<InvoiceType, InvoiceRef | undefined> = {
+    dp: invoices.find((i) => i.invoice_type === "dp" && i.status !== "void"),
+    final: invoices.find(
+      (i) => i.invoice_type === "final" && i.status !== "void",
+    ),
+  };
+  const hasVoided = invoices.some((i) => i.status === "void");
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -134,21 +148,44 @@ export default function BookingDetailActions({
         </button>
       )}
 
-      {invoiceId ? (
+      {liveByType.dp ? (
         <a
-          href={`/admin/bookings/${bookingId}/invoice/${invoiceId}`}
+          href={`/admin/bookings/${bookingId}/invoice/${liveByType.dp.id}`}
           className={btnSecondary}
         >
-          Lihat Invoice
+          Invoice DP
         </a>
       ) : (
         <button
           type="button"
-          onClick={createInvoice}
+          onClick={() => createInvoice("dp")}
+          disabled={busy}
+          className={btnSecondary}
+          title={
+            dpReceivedAt
+              ? undefined
+              : "Biasanya dibuat saat meminta deposit dari pelanggan"
+          }
+        >
+          + Invoice DP
+        </button>
+      )}
+
+      {liveByType.final ? (
+        <a
+          href={`/admin/bookings/${bookingId}/invoice/${liveByType.final.id}`}
+          className={btnPrimary}
+        >
+          Invoice Final
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={() => createInvoice("final")}
           disabled={busy}
           className={btnPrimary}
         >
-          Buat Invoice
+          {hasVoided ? "Terbitkan Ulang Invoice Final" : "Buat Invoice Final"}
         </button>
       )}
     </div>

@@ -22,7 +22,7 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 
 ## Admin panel (`app/admin/(panel)` — session required)
 
-Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing the remaining sidebar items (Vendor, Kategori, Pengaturan, Lihat Situs, Keluar).
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing the remaining sidebar items (Vendor, Supplier, Staff, Kas, Laporan, Rencana, Kategori, Pengaturan, Lihat Situs, Keluar).
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
@@ -33,13 +33,19 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/admin/products/[id]/edit` | [admin/products-edit.md](admin/products-edit.md) | Edit product, manage photos, is_active, recipe ("Isi Paket") |
 | `/admin/bookings` | [admin/bookings-list.md](admin/bookings-list.md) | Booking list, search/filters, pagination, inline status change |
 | `/admin/bookings/new` | [admin/bookings-new.md](admin/bookings-new.md) | Record a new booking (product or custom) |
-| `/admin/bookings/[id]` | [admin/bookings-detail.md](admin/bookings-detail.md) | Booking detail: item snapshot, 3-phase checklist, DP + project status |
+| `/admin/bookings/[id]` | [admin/bookings-detail.md](admin/bookings-detail.md) | Booking detail: item snapshot, 3-phase checklist, staff + margin, DP + project status + invoice slots |
 | `/admin/bookings/[id]/edit` | [admin/bookings-edit.md](admin/bookings-edit.md) | Edit booking details/status |
 | `/admin/items` | [admin/items-list.md](admin/items-list.md) | Inventory list, search/filters, pagination, low-stock badge |
 | `/admin/items/new` | [admin/items-new.md](admin/items-new.md) | Create item (consumable/rentable) with category autocomplete |
 | `/admin/items/[id]` | [admin/items-detail.md](admin/items-detail.md) | Variant management, stock movements, price history |
 | `/admin/items/[id]/edit` | [admin/items-edit.md](admin/items-edit.md) | Edit item master data |
 | `/admin/vendors` | [admin/vendors.md](admin/vendors.md) | Vendor CRUD (inline edit, plain-confirm delete) |
+| `/admin/suppliers` | [admin/suppliers.md](admin/suppliers.md) | Material supplier CRUD for plans/orders (delete blocked while referenced) |
+| `/admin/staff` | [admin/staff.md](admin/staff.md) | Staff & helper master data (inline edit, active toggle) |
+| `/admin/ledger` | [admin/ledger.md](admin/ledger.md) | Append-only cash book: record, reverse, category settings |
+| `/admin/report` | [admin/report.md](admin/report.md) | Monthly cashflow report (totals + per category, account filter) |
+| `/admin/plans` | [admin/plans-list.md](admin/plans-list.md) | Purchase plans list + create (buy/create/fix/rnd/upgrade) |
+| `/admin/plans/[id]` | [admin/plans-detail.md](admin/plans-detail.md) | Plan lifecycle: approve/cancel, lines with derived status, R&D outcomes |
 | `/admin/categories` | [admin/categories.md](admin/categories.md) | Product category CRUD (inline rename, pagination) |
 | `/admin/settings` | [admin/settings.md](admin/settings.md) | Company profile (single row, logo upload) + bank account list for invoices |
 
@@ -59,7 +65,13 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/api/admin/stock-movements` | [api/admin-stock-movements.md](api/admin-stock-movements.md) | POST |
 | `/api/admin/company-profile` | [api/admin-company-profile.md](api/admin-company-profile.md) | PATCH (single seeded row — no POST by design) |
 | `/api/admin/bank-accounts` | [api/admin-bank-accounts.md](api/admin-bank-accounts.md) | POST, PATCH (allow-list), DELETE |
-| `/api/admin/invoices` | [api/admin-invoices.md](api/admin-invoices.md) | POST (draft + prefill), PATCH (`action` dispatch: save-lines / issue / record-payment / void), DELETE (draft only) |
+| `/api/admin/suppliers` | [api/admin-suppliers.md](api/admin-suppliers.md) | POST, PATCH (allow-list), DELETE (409 while referenced) |
+| `/api/admin/booking-staff` | [api/admin-booking-staff.md](api/admin-booking-staff.md) | POST (assign, planned), PATCH (allow-list incl. status), DELETE |
+| `/api/admin/transactions` | [api/admin-transactions.md](api/admin-transactions.md) | POST (append), PATCH (`action "reverse"` only — append-only ledger, no GET/DELETE) |
+| `/api/admin/transaction-categories` | [api/admin-transaction-categories.md](api/admin-transaction-categories.md) | POST (direction fixed at creation), PATCH (name/active/sort — no DELETE) |
+| `/api/admin/plans` | [api/admin-plans.md](api/admin-plans.md) | POST (optional starter lines), PATCH (allow-list incl. status), DELETE (always allowed) |
+| `/api/admin/plan-lines` | [api/admin-plan-lines.md](api/admin-plan-lines.md) | POST, PATCH (incl. done_at / outcome), DELETE — each recomputes the parent plan status |
+| `/api/admin/invoices` | [api/admin-invoices.md](api/admin-invoices.md) | POST (dp/final draft + prefill), PATCH (`action` dispatch: save-lines / issue / record-payment / void), DELETE (draft only) |
 
 ## Infrastructure routes
 

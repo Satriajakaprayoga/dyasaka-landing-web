@@ -31,6 +31,8 @@ export default async function InvoiceManagerPage(props: {
     profileRes,
     catalogRes,
     vendorProductsRes,
+    invoicePaidRes,
+    bookingPaidRes,
   ] = await Promise.all([
     supabase
       .from("bookings")
@@ -65,6 +67,20 @@ export default async function InvoiceManagerPage(props: {
       .not("vendor_id", "is", null)
       .eq("is_active", true)
       .order("name"),
+    // Paid amounts live in the ledger, not on the invoice. This
+    // invoice's `in` rows feed the payment panel; the whole booking's
+    // `in` rows feed the "already received (incl. DP)" strip that a
+    // final draft shows.
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("invoice_id", params.invoiceId)
+      .eq("direction", "in"),
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("booking_id", params.id)
+      .eq("direction", "in"),
   ]);
 
   const booking = (bookingRes.data ?? null) as BookingRef | null;
@@ -80,6 +96,9 @@ export default async function InvoiceManagerPage(props: {
   const catalog = (catalogRes.data ?? []) as unknown as BookingCatalogItem[];
   const vendorProducts = (vendorProductsRes.data ??
     []) as unknown as VendorProductRef[];
+
+  const sumIn = (rows: { amount: number }[] | null) =>
+    (rows ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -111,6 +130,8 @@ export default async function InvoiceManagerPage(props: {
         vendorProducts={vendorProducts}
         companyName={profileRes.data?.company_name ?? null}
         logoUrl={profileRes.data?.logo_url ?? null}
+        initialPaid={sumIn(invoicePaidRes.data)}
+        bookingPaid={sumIn(bookingPaidRes.data)}
       />
     </div>
   );

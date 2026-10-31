@@ -3,44 +3,50 @@
 | | |
 | --- | --- |
 | **URL** | `/invoice/[token]` (app root — standalone, like `/offline`) |
-| **Access** | Public, unguessable 64-hex `access_token`; no login |
+| **Access** | Public, unguessable `access_token` (64-hex, DB default `gen_random_bytes(32)` hex); no login |
 | **Rendering** | Dynamic Server Component (`ƒ`) + `PrintButton` client component |
 | **Source** | `app/invoice/[token]/page.tsx`, `app/invoice/[token]/PrintButton.tsx` |
 
 ## Access rules
 
-- The token is the **only** credential: `access_token` is a 64-char
-  hex string (two built-in `gen_random_uuid()` calls), unique per
-  invoice. Links are handed to the customer over WhatsApp from the
-  invoice manager.
+- The token is the **only** credential, unique per invoice. Links are
+  handed to the customer over WhatsApp from the invoice manager.
 - The public path is **only** the security-definer RPC
-  `get_invoice_by_token(p_token)` — anon has no SELECT policy on
-  `invoices`/`invoice_items` at all. The RPC returns
-  `{ invoice, items, booking }` for
-  `status ∈ ('issued','partially_paid','paid')` only, with
-  `access_token` stripped from the invoice object; draft, void and
-  unknown tokens are indistinguishable → `notFound()` (plain 404,
-  reveals nothing about other invoices). A partially-paid invoice keeps
-  rendering (badge "Bayar Sebagian" + remaining balance) — missing it
-  from the filter would 404 a link that worked before the payment.
+  `get_invoice_by_token(p_token)` — anon has no SELECT on
+  `invoices`/`invoice_items` at all. The RPC answers three ways
+  (20261101100000_invoice_multi.sql):
+  - `issued` / `paid` → `{ replaced: false, invoice, items, booking }`
+    with `access_token` stripped and `amount_paid`/`balance_due`
+    **computed from the ledger** (`in` rows carrying `invoice_id`).
+  - `void` → `{ replaced: true, invoice_number, current_token }` —
+    slim payload, no amounts; `current_token` is the booking's current
+    non-void invoice of the same type, when one exists.
+  - `draft` / unknown → null, indistinguishable → `notFound()` (plain
+    404, reveals nothing about other invoices).
+- `force-dynamic` + `fetchCache = "force-no-store"` — a customer can
+  never see totals from before a correction (payments now change
+  amounts without touching the frozen invoice row, so this matters
+  more than ever).
 - `company_profile` is read directly (public SELECT by design) so the
-  logo/contact header stays live — the invoice itself is snapshotted at
-  issue time.
+  logo/contact header stays live — the invoice's company name and
+  bill-to fields are snapshotted at issue.
 - `metadata`: title `Invoice`, `robots: { index: false, follow: false }`.
 
-## Rendering
+## Rendering (issued/paid)
 
 Print-friendly centered `max-w-2xl` document on a gray page background
 (print: white, no shadow):
 
 - **Header** — live logo + `company_name_snapshot` (falls back to the
-  live profile name), profile address/phone/email; "INVOICE" +
-  `invoice_number` on the right.
+  live profile name), profile address/phone/email; "INVOICE" or
+  "INVOICE DP" (`invoice_type`) + `invoice_number` on the right.
 - **Meta** — issue date, due date, `InvoiceStatusBadge` (Terbit/Lunas).
 - **Bill-to** — customer name, phone, event address, theme, event date
-  (from the RPC's booking fields only — no other booking data).
+  (the RPC prefers the issue-time snapshots, falling back to the
+  booking for invoices issued before snapshots existed).
 - **Lines table** — description, qty, `line_total` (`formatRupiah`).
-- **Totals** — subtotal, total, amount paid, bold **Sisa Tagihan**.
+- **Totals** — subtotal, total, Dibayar (ledger-computed), bold
+  **Sisa Tagihan** (ledger-computed, floor 0).
 - **Bank box** — `bank_account_snapshot` ("{bank} a/n {holder} •
   {number}") snapshotted at issue.
 - **Notes** — free text, when present.
@@ -48,3 +54,11 @@ Print-friendly centered `max-w-2xl` document on a gray page background
 **Unduh PDF / Cetak** (`PrintButton`) — `window.print()`; the PDF is
 produced by the browser's print dialog ("Save as PDF"), no PDF library,
 and the button itself is `print:hidden`.
+
+## Rendering (void — replaced notice)
+
+A voided invoice's old link never 404s (customers bookmark and print
+these). Instead: a small centered card — "Invoice telah digantikan",
+naming the voided number, with a **Lihat Invoice Terbaru** button to
+`/invoice/{current_token}` when a replacement exists. No amounts, so a
+stale printed total can't be confused with a live one.

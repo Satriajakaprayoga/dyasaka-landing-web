@@ -21,6 +21,9 @@ type Impact = { blocked: boolean; lines: { text: string; danger: boolean }[] };
 export type BookingItemVariant = {
   color: string | null;
   size: string | null;
+  // What one unit costs the business — margin fallback when the
+  // booking item has no frozen unit_cost (older rows).
+  cost_price: number | null;
   items: { name: string; type: string; quantity_owned: number } | null;
 };
 

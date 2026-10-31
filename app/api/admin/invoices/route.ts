@@ -3,18 +3,20 @@ import { createServerSupabase } from '@/lib/supabase-server';
 import type { InvoiceLineSource } from '@/lib/types';
 
 /**
- * Admin-only invoice state machine (§9). One invoice per booking
- * (booking_id UNIQUE): the DP is recorded as a payment against it.
+ * Admin-only invoice state machine (§9). Several invoices per booking:
+ * `dp` (deposit) and `final`, at most one non-void of each type
+ * (partial unique index invoices_booking_type_live).
  *
- * Editable-until-paid model: draft/issued/partially_paid are fully
- * editable; `partially_paid` is derived from the payment math on
- * every write, never sent by clients; paid/void are read-only
- * (paid strictly — no void, no reversal).
+ * Issued invoices are FROZEN — lines, totals and snapshots. The only
+ * correction is void + reissue. Paid amount and balance due are NOT
+ * stored: they are calculated from ledger `in` rows carrying
+ * invoice_id, exactly like stock_quantity from stock_movements.
  *
- * POST   { booking_id }                    → create draft (prefilled)
- * PATCH  { id, action, … }                 → action dispatch:
- *          save-lines | issue | record-payment | void
- * DELETE ?id=                              → delete draft
+ * POST   { booking_id, invoice_type, amount? } → create draft
+ *          (final = prefilled from booking lines; dp = one typed line)
+ * PATCH  { id, action, … }                     → action dispatch:
+ *          save-lines (draft only) | issue | record-payment | void
+ * DELETE ?id=                                  → delete draft
  */
 
 function pad(n: number, len: number) {
@@ -79,6 +81,20 @@ function parseLines(raw: unknown): { lines: {
   return { lines };
 }
 
+/** Paid = sum of ledger `in` rows linked to this invoice. */
+async function paidAmount(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  invoiceId: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('invoice_id', invoiceId)
+    .eq('direction', 'in');
+
+  return (data ?? []).reduce((s, r) => s + Number(r.amount), 0);
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
 
@@ -90,10 +106,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { booking_id } = await req.json();
+  const body = await req.json();
+  const { booking_id } = body;
   if (!booking_id) {
     return NextResponse.json({ error: 'Missing booking id' }, { status: 400 });
   }
+
+  const invoice_type = body.invoice_type === 'dp' ? 'dp' : 'final';
 
   const { data: booking } = await supabase
     .from('bookings')
@@ -111,15 +130,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // At most one non-void invoice per (booking, type). The partial
+  // unique index is the referee if two requests race.
   const { data: existing } = await supabase
     .from('invoices')
     .select('id')
     .eq('booking_id', booking_id)
+    .eq('invoice_type', invoice_type)
+    .neq('status', 'void')
     .maybeSingle();
 
   if (existing) {
     return NextResponse.json(
-      { error: 'Booking ini sudah memiliki invoice' },
+      {
+        error: `Booking ini sudah memiliki invoice ${invoice_type === 'dp' ? 'DP' : 'final'} — batalkan (void) yang lama untuk membuat yang baru`,
+      },
       { status: 409 },
     );
   }
@@ -131,69 +156,95 @@ export async function POST(req: NextRequest) {
     products: { name: string; price: number } | null;
   };
 
-  // Prefill lines from the booking's item snapshot, priced at the
-  // CURRENT catalog price (falling back to the booking's frozen price
-  // when the variant is gone). Copies either way — later catalog
-  // changes never touch an existing invoice.
-  const { data: bookingItems } = await supabase
-    .from('booking_items')
-    .select(
-      'quantity, unit_price, item_variants(color, size, current_price, items(name))',
-    )
-    .eq('booking_id', booking_id)
-    .order('id');
-
-  const rows = (bookingItems ?? []) as unknown as {
-    quantity: number;
-    unit_price: number;
-    item_variants: {
-      color: string | null;
-      size: string | null;
-      current_price: number | null;
-      items: { name: string } | null;
-    } | null;
-  }[];
-
-  const lines: {
+  type PrefillLine = {
     description: string;
     quantity: number;
     unit_price: number;
     source_type: InvoiceLineSource;
     sort_order: number;
-  }[] = [];
+  };
 
-  // 1) The package itself, first on the bill.
-  if (product_id && pkg) {
-    lines.push({
-      description: pkg.name,
-      quantity: 1,
-      unit_price: Number(pkg.price),
-      source_type: 'custom',
-      sort_order: 0,
-    });
-  }
+  let lines: PrefillLine[] = [];
 
-  // 2) Item lines at live catalog prices.
-  rows.forEach((r, i) => {
-    const livePrice = r.item_variants?.current_price;
-    lines.push({
-      description: describeVariant(r.item_variants),
-      quantity: r.quantity,
-      unit_price: livePrice != null ? Number(livePrice) : Number(r.unit_price),
-      source_type: 'item',
-      sort_order: (i + 1) * 10,
-    });
-  });
+  if (invoice_type === 'dp') {
+    // Deposit invoice: exactly one typed line, optionally prefilled by
+    // the UI from a percentage of the booking total.
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        { error: 'Nominal DP harus lebih besar dari 0' },
+        { status: 400 },
+      );
+    }
+    lines = [
+      {
+        description:
+          typeof body.description === 'string' && body.description.trim()
+            ? body.description.trim().slice(0, 200)
+            : 'Deposit (DP)',
+        quantity: 1,
+        unit_price: amount,
+        source_type: 'custom',
+        sort_order: 0,
+      },
+    ];
+  } else {
+    // Final invoice: prefilled from the booking's item snapshot, priced
+    // at the CURRENT catalog price (falling back to the booking's
+    // frozen price when the variant is gone). Copies either way —
+    // later catalog changes never touch an existing invoice.
+    const { data: bookingItems } = await supabase
+      .from('booking_items')
+      .select(
+        'quantity, unit_price, item_variants(color, size, current_price, items(name))',
+      )
+      .eq('booking_id', booking_id)
+      .order('id');
 
-  // 3) Transport last.
-  if (booking.transport_fee != null && Number(booking.transport_fee) > 0) {
-    lines.push({
-      description: 'Biaya Transport',
-      quantity: 1,
-      unit_price: Number(booking.transport_fee),
-      source_type: 'transport',
-      sort_order: lines.length * 10,
+    const rows = (bookingItems ?? []) as unknown as {
+      quantity: number;
+      unit_price: number;
+      item_variants: {
+        color: string | null;
+        size: string | null;
+        current_price: number | null;
+        items: { name: string } | null;
+      } | null;
+    }[];
+
+    // 1) The package itself, first on the bill.
+    if (product_id && pkg) {
+      lines.push({
+        description: pkg.name,
+        quantity: 1,
+        unit_price: Number(pkg.price),
+        source_type: 'custom',
+        sort_order: 0,
+      });
+    }
+
+    // 2) Item lines at live catalog prices.
+    rows.forEach((r, i) => {
+      const livePrice = r.item_variants?.current_price;
+      lines.push({
+        description: describeVariant(r.item_variants),
+        quantity: r.quantity,
+        unit_price: livePrice != null ? Number(livePrice) : Number(r.unit_price),
+        source_type: 'item',
+        sort_order: (i + 1) * 10,
+      });
     });
+
+    // 3) Transport last.
+    if (booking.transport_fee != null && Number(booking.transport_fee) > 0) {
+      lines.push({
+        description: 'Biaya Transport',
+        quantity: 1,
+        unit_price: Number(booking.transport_fee),
+        source_type: 'transport',
+        sort_order: lines.length * 10,
+      });
+    }
   }
 
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
@@ -201,11 +252,19 @@ export async function POST(req: NextRequest) {
   const { data: invoice, error } = await supabase
     .from('invoices')
     // access_token is generated by the DB default.
-    .insert({ booking_id, subtotal, total: subtotal, balance_due: subtotal })
+    .insert({ booking_id, invoice_type, subtotal, total: subtotal })
     .select()
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      return NextResponse.json(
+        {
+          error: `Booking ini sudah memiliki invoice ${invoice_type === 'dp' ? 'DP' : 'final'} yang aktif`,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -250,14 +309,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invoice tidak ditemukan' }, { status: 404 });
   }
 
-  // ---------- save-lines (editable: draft | issued | partially_paid) ----------
+  // ---------- save-lines (draft only — issued is frozen) ----------
   if (action === 'save-lines') {
-    const isDraftInvoice = invoice.status === 'draft';
-
-    if (!isDraftInvoice && invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
-      // paid / void are read-only, strictly.
+    if (invoice.status !== 'draft') {
       return NextResponse.json(
-        { error: 'Invoice lunas atau dibatalkan tidak dapat diubah' },
+        { error: 'Hanya draft yang dapat diubah — invoice terbit tidak bisa diedit' },
         { status: 409 },
       );
     }
@@ -272,72 +328,12 @@ export async function PATCH(req: NextRequest) {
     const notes = body.notes ? body.notes : null;
     const bank_account_id = body.bank_account_id ? body.bank_account_id : null;
 
-    const amountPaid = Number(invoice.amount_paid);
-
-    // Issued invoices keep an active bank account — the customer
-    // needs somewhere to pay.
-    let bank_account_snapshot = invoice.bank_account_snapshot;
-    if (!isDraftInvoice) {
-      if (parsed.lines.length === 0) {
-        return NextResponse.json(
-          { error: 'Invoice terbit minimal harus memiliki satu baris' },
-          { status: 400 },
-        );
-      }
-      if (!bank_account_id) {
-        return NextResponse.json(
-          { error: 'Pilih rekening bank terlebih dahulu' },
-          { status: 400 },
-        );
-      }
-      // Re-snapshot only when the account actually changed — an
-      // unchanged id keeps its issued-time snapshot even if the bank
-      // was later deactivated.
-      if (bank_account_id !== invoice.bank_account_id || !bank_account_snapshot) {
-        const { data: bank } = await supabase
-          .from('company_bank_accounts')
-          .select('bank_name, account_holder, account_number, is_active')
-          .eq('id', bank_account_id)
-          .maybeSingle();
-
-        if (!bank || !bank.is_active) {
-          return NextResponse.json(
-            { error: 'Pilih rekening bank yang aktif' },
-            { status: 400 },
-          );
-        }
-        bank_account_snapshot = `${bank.bank_name} a/n ${bank.account_holder} • ${bank.account_number}`;
-      }
-    }
-
     const subtotal = parsed.lines.reduce(
       (s, l) => s + l.quantity * l.unit_price,
       0,
     );
-    const balanceDue = subtotal - amountPaid;
 
-    if (balanceDue < 0) {
-      return NextResponse.json(
-        {
-          error: `Total baru lebih kecil dari pembayaran tercatat (${amountPaid}) — kurangi pembayaran terlebih dahulu`,
-        },
-        { status: 400 },
-      );
-    }
-
-    // partially_paid is derived, never stored by hand: settled → paid,
-    // some money in → partially_paid, nothing in → issued. Drafts keep
-    // their status until issued.
-    const nextStatus = isDraftInvoice
-      ? 'draft'
-      : amountPaid > 0 && balanceDue <= 0
-        ? 'paid'
-        : amountPaid > 0
-          ? 'partially_paid'
-          : 'issued';
-
-    // Replace-all: rewriting the whole line set is simpler than
-    // diffing, at any status.
+    // Replace-all: rewriting the whole line set is simpler than diffing.
     const { error: delError } = await supabase
       .from('invoice_items')
       .delete()
@@ -360,14 +356,11 @@ export async function PATCH(req: NextRequest) {
     const { data: updated, error: updError } = await supabase
       .from('invoices')
       .update({
-        status: nextStatus,
         due_date,
         notes,
         bank_account_id,
-        bank_account_snapshot,
         subtotal,
         total: subtotal,
-        balance_due: balanceDue,
       })
       .eq('id', invoice.id)
       .select()
@@ -386,7 +379,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ invoice: updated, items: items ?? [] });
   }
 
-  // ---------- issue (draft only) ----------
+  // ---------- issue (draft only — freezing) ----------
   if (action === 'issue') {
     if (invoice.status !== 'draft') {
       return NextResponse.json(
@@ -432,7 +425,7 @@ export async function PATCH(req: NextRequest) {
 
     const { data: booking } = await supabase
       .from('bookings')
-      .select('status')
+      .select('status, customer_name, phone, event_address, event_date')
       .eq('id', invoice.booking_id)
       .maybeSingle();
 
@@ -481,9 +474,12 @@ export async function PATCH(req: NextRequest) {
           invoice_number: invoiceNumber,
           company_name_snapshot: profile?.company_name ?? null,
           bank_account_snapshot: bankSnapshot,
+          customer_name_snapshot: booking.customer_name,
+          phone_snapshot: booking.phone,
+          event_address_snapshot: booking.event_address,
+          event_date_snapshot: booking.event_date,
           subtotal,
           total: subtotal,
-          balance_due: subtotal - Number(invoice.amount_paid),
         })
         .eq('id', invoice.id)
         .select()
@@ -503,9 +499,9 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  // ---------- record-payment (issued | partially_paid) ----------
+  // ---------- record-payment (issued only — writes a ledger row) ----------
   if (action === 'record-payment') {
-    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+    if (invoice.status !== 'issued') {
       return NextResponse.json(
         { error: 'Pembayaran hanya dicatat pada invoice yang terbit' },
         { status: 409 },
@@ -513,7 +509,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const amount = Number(body.amount);
-    const balanceDue = Number(invoice.balance_due);
+    const paid = await paidAmount(supabase, invoice.id);
+    const balanceDue = Number(invoice.total) - paid;
+
     if (!Number.isFinite(amount) || amount <= 0 || amount > balanceDue) {
       return NextResponse.json(
         { error: `Nominal pembayaran harus di antara 0 dan sisa tagihan (${balanceDue})` },
@@ -521,34 +519,75 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const amountPaid = Number(invoice.amount_paid) + amount;
-    const newBalance = Number(invoice.total) - amountPaid;
+    // Payments land in the ledger as `in` rows under the Customer
+    // payment category — seeded with the ledger, so it exists.
+    const { data: category } = await supabase
+      .from('transaction_categories')
+      .select('id')
+      .eq('name', 'Customer payment')
+      .eq('direction', 'in')
+      .limit(1)
+      .maybeSingle();
 
-    // Settled → paid (read-only from here); anything else with money
-    // in → partially_paid.
-    const { data: updated, error } = await supabase
-      .from('invoices')
-      .update({
-        amount_paid: amountPaid,
-        balance_due: newBalance,
-        status: newBalance <= 0 ? 'paid' : 'partially_paid',
+    if (!category) {
+      return NextResponse.json(
+        { error: 'Kategori "Customer payment" tidak ditemukan — tambahkan di pengaturan Kas' },
+        { status: 400 },
+      );
+    }
+
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        direction: 'in',
+        amount,
+        transaction_date:
+          typeof body.transaction_date === 'string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(body.transaction_date)
+            ? body.transaction_date
+            : new Date().toISOString().slice(0, 10),
+        category_id: category.id,
+        account: typeof body.account === 'string' && body.account.trim() !== ''
+          ? body.account.trim()
+          : null,
+        description: `Pembayaran invoice ${invoice.invoice_number ?? ''}`.trim(),
+        booking_id: invoice.booking_id,
+        invoice_id: invoice.id,
       })
+      .select()
+      .single();
+
+    if (txError) {
+      return NextResponse.json({ error: txError.message }, { status: 500 });
+    }
+
+    // Settled → paid; otherwise the invoice stays issued. The row is
+    // never edited — status follows the ledger, nothing else changes.
+    const newPaid = paid + amount;
+    const { data: updated, error: updError } = await supabase
+      .from('invoices')
+      .update({ status: newPaid >= Number(invoice.total) ? 'paid' : 'issued' })
       .eq('id', invoice.id)
       .select()
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (updError) {
+      return NextResponse.json({ error: updError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ invoice: updated });
+    return NextResponse.json({
+      invoice: updated,
+      transaction,
+      paid: newPaid,
+      balance_due: Math.max(Number(invoice.total) - newPaid, 0),
+    });
   }
 
-  // ---------- void (issued | partially_paid — never paid, never draft) ----------
+  // ---------- void (issued | paid — the correction path) ----------
   if (action === 'void') {
-    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+    if (invoice.status !== 'issued' && invoice.status !== 'paid') {
       return NextResponse.json(
-        { error: 'Hanya invoice terbit atau bayar sebagian yang dapat dibatalkan' },
+        { error: 'Hanya invoice terbit atau lunas yang dapat dibatalkan' },
         { status: 409 },
       );
     }
