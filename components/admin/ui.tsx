@@ -4,6 +4,7 @@ import type {
   PlanStatus,
   PlanType,
   ProjectStatus,
+  PurchaseOrderStatus,
   RentalStatus,
 } from "@/lib/types";
 import Link from "next/link";
@@ -223,6 +224,19 @@ const planTypeLabels: Record<PlanType, string> = {
 
 export function PlanTypeBadge({ type }: { type: PlanType }) {
   return <Badge tone="gray">{planTypeLabels[type] ?? type}</Badge>;
+}
+
+const orderStatusMap: Record<PurchaseOrderStatus, { label: string; tone: BadgeTone }> = {
+  draft: { label: "Draft", tone: "gray" },
+  ordered: { label: "Dipesan", tone: "blue" },
+  partially_received: { label: "Sebagian", tone: "amber" },
+  received: { label: "Diterima", tone: "green" },
+  cancelled: { label: "Dibatalkan", tone: "red" },
+};
+
+export function OrderStatusBadge({ status }: { status: PurchaseOrderStatus }) {
+  const s = orderStatusMap[status] ?? { label: status, tone: "gray" as BadgeTone };
+  return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 
 export function EmptyState({

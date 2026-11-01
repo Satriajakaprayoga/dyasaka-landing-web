@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ChecklistItem, ChecklistPhase, ChecklistStatus } from "@/lib/types";
 import {
@@ -313,6 +314,16 @@ function PhaseSection({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                  {phase === "stock_check" &&
+                    row.status === "need_order" &&
+                    rental?.item_variant_id && (
+                      <Link
+                        href={`/admin/orders?booking_id=${bookingId}&item_variant_id=${rental.item_variant_id}&quantity=1`}
+                        className="shrink-0 rounded-lg bg-gray-900 px-2 py-1 font-medium text-white transition hover:bg-gray-800"
+                      >
+                        Buat PO
+                      </Link>
+                    )}
                   <input
                     type="text"
                     placeholder="Catatan…"

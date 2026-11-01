@@ -22,7 +22,7 @@ One markdown file per route, mirroring the `app/` directory structure. Docs desc
 
 ## Admin panel (`app/admin/(panel)` — session required)
 
-Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing the remaining sidebar items (Vendor, Supplier, Staff, Kas, Laporan, Rencana, Kategori, Pengaturan, Lihat Situs, Keluar).
+Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed bottom tab bar (`components/admin/BottomNav.tsx`) with Dashboard, Produk, Inventori, Booking, and **Lainnya** — the Lainnya button slides the sidebar in as a drawer (backdrop + close button + scroll lock) exposing the remaining sidebar items (Vendor, Supplier, Kas, Laporan, Rencana, Pembelian, Staff, Kategori, Pengaturan, Lihat Situs, Keluar).
 
 | Route | Doc | Purpose |
 | --- | --- | --- |
@@ -46,6 +46,8 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/admin/report` | [admin/report.md](admin/report.md) | Monthly cashflow report (totals + per category, account filter) |
 | `/admin/plans` | [admin/plans-list.md](admin/plans-list.md) | Purchase plans list + create (buy/create/fix/rnd/upgrade) |
 | `/admin/plans/[id]` | [admin/plans-detail.md](admin/plans-detail.md) | Plan lifecycle: approve/cancel, lines with derived status, R&D outcomes |
+| `/admin/orders` | [admin/orders.md](admin/orders.md) | Purchase orders list + create (lines from catalog, optional plan links, checklist prefill) |
+| `/admin/orders/[id]` | [admin/orders-detail.md](admin/orders-detail.md) | PO lifecycle: send to supplier, receive goods into stock, pay into the ledger |
 | `/admin/categories` | [admin/categories.md](admin/categories.md) | Product category CRUD (inline rename, pagination) |
 | `/admin/settings` | [admin/settings.md](admin/settings.md) | Company profile (single row, logo upload) + bank account list for invoices |
 
@@ -71,6 +73,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/api/admin/transaction-categories` | [api/admin-transaction-categories.md](api/admin-transaction-categories.md) | POST (direction fixed at creation), PATCH (name/active/sort — no DELETE) |
 | `/api/admin/plans` | [api/admin-plans.md](api/admin-plans.md) | POST (optional starter lines), PATCH (allow-list incl. status), DELETE (always allowed) |
 | `/api/admin/plan-lines` | [api/admin-plan-lines.md](api/admin-plan-lines.md) | POST, PATCH (incl. done_at / outcome), DELETE — each recomputes the parent plan status |
+| `/api/admin/purchase-orders` | [api/admin-purchase-orders.md](api/admin-purchase-orders.md) | POST (draft + plan links), PATCH (`action` dispatch: save / order / receive / cancel / pay), DELETE (draft only) |
 | `/api/admin/invoices` | [api/admin-invoices.md](api/admin-invoices.md) | POST (dp/final draft + prefill), PATCH (`action` dispatch: save-lines / issue / record-payment / void), DELETE (draft only) |
 
 ## Infrastructure routes

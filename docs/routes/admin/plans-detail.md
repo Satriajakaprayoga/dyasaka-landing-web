@@ -19,7 +19,8 @@ Parallel loads (unknown id → `EmptyState` fallback):
 
 - The plan (`purchase_plans` + `booking:bookings(customer_name)`).
 - Lines: `purchase_plan_lines` + `supplier:suppliers(name)` +
-  `po_item:purchase_order_items(quantity_ordered, quantity_received)`
+  `po_item:purchase_order_items(id, quantity_ordered, quantity_received,
+  unit_cost)`
   (cast `as unknown as` — to-one embeds return objects at runtime).
 - Ledger rows for the plan's lines: `transactions` where
   `plan_line_id in (line ids)` — actual spend = Σ `out` rows.
@@ -44,7 +45,12 @@ automatically by the plan-lines API's recompute, not by hand here.
 ## Money cards
 
 Estimasi (Σ qty × `estimated_unit_cost`), Realisasi (Σ ledger `out`
-rows across the plan's lines), Selisih (estimasi − realisasi).
+rows across the plan's lines **+** goods received via purchase orders:
+Σ `quantity_received × unit_cost` over the lines' DISTINCT PO items —
+PO payments carry `purchase_order_id`, not `plan_line_id`, so their
+cost is added here instead; the card subline splits "N pengeluaran kas
+· barang diterima Rp…"), Selisih (estimasi − realisasi). Per-line meta
+shows that line's PO share (`PO Rp…`) when linked.
 
 ## Lines
 

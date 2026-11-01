@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import BottomNav from "./BottomNav";
 import {
   CalendarIcon,
+  CartIcon,
   ChartIcon,
   ClipboardIcon,
   DashboardIcon,
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/admin/ledger", label: "Kas", icon: WalletIcon },
   { href: "/admin/report", label: "Laporan", icon: ChartIcon },
   { href: "/admin/plans", label: "Rencana", icon: ClipboardIcon },
+  { href: "/admin/orders", label: "Pembelian", icon: CartIcon },
   { href: "/admin/staff", label: "Staff", icon: UserIcon },
   { href: "/admin/settings", label: "Pengaturan", icon: SettingsIcon },
 ];

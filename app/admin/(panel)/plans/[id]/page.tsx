@@ -34,8 +34,10 @@ import ConfirmModal from "@/components/admin/ConfirmModal";
 type LineRow = PurchasePlanLine & {
   supplier: { name: string } | null;
   po_item: {
+    id: string;
     quantity_ordered: number;
     quantity_received: number | null;
+    unit_cost: number;
   } | null;
 };
 
@@ -131,7 +133,7 @@ export default function PlanDetailPage() {
     const { data, error } = await supabase
       .from("purchase_plan_lines")
       .select(
-        "*, supplier:suppliers(name), po_item:purchase_order_items(quantity_ordered, quantity_received)",
+        "*, supplier:suppliers(name), po_item:purchase_order_items(id, quantity_ordered, quantity_received, unit_cost)",
       )
       .eq("plan_id", id)
       .order("sort_order");
@@ -197,13 +199,31 @@ export default function PlanDetailPage() {
     [lines],
   );
 
-  const actualTotal = useMemo(
+  // Goods bought via purchase orders never touch the ledger with a
+  // plan_line_id (PO payments carry purchase_order_id), so their cost
+  // enters the realisasi as received quantity × unit cost. Several plan
+  // lines can share one PO item — count each PO item once.
+  const poCostTotal = useMemo(() => {
+    const seen = new Set<string>();
+    let sum = 0;
+    for (const l of lines) {
+      const p = l.po_item;
+      if (!p || seen.has(p.id)) continue;
+      seen.add(p.id);
+      sum += (p.quantity_received ?? 0) * Number(p.unit_cost);
+    }
+    return sum;
+  }, [lines]);
+
+  const ledgerTotal = useMemo(
     () =>
       ledger
         .filter((t) => t.direction === "out")
         .reduce((sum, t) => sum + Number(t.amount), 0),
     [ledger],
   );
+
+  const actualTotal = ledgerTotal + poCostTotal;
 
   const ledgerByLine = useMemo(() => {
     const map = new Map<string, number>();
@@ -563,7 +583,14 @@ export default function PlanDetailPage() {
             {formatRupiah(actualTotal)}
           </p>
           <p className="mt-0.5 text-xs text-gray-400">
-            Dari {ledger.filter((t) => t.direction === "out").length} pengeluaran
+            {[
+              `${ledger.filter((t) => t.direction === "out").length} pengeluaran kas`,
+              poCostTotal > 0
+                ? `barang diterima ${formatRupiah(poCostTotal)}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </Card>
         <Card className="p-4">
@@ -841,6 +868,12 @@ export default function PlanDetailPage() {
                               }`,
                               l.supplier?.name,
                               actual != null ? `Realisasi ${formatRupiah(actual)}` : null,
+                              l.po_item
+                                ? `PO ${formatRupiah(
+                                    (l.po_item.quantity_received ?? 0) *
+                                      Number(l.po_item.unit_cost),
+                                  )}`
+                                : null,
                             ]
                               .filter(Boolean)
                               .join(" · ")}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { recomputePlanStatus } from '@/lib/plan-status';
 
 /**
  * Purchase plan lines (§15). Line execution status is DERIVED, never
@@ -7,7 +8,8 @@ import { createServerSupabase } from '@/lib/supabase-server';
  * order line = ordered; the order line fully received, or done_at set
  * = done. After every mutation the parent plan's status is
  * recomputed: approved → in_progress when the first line is linked or
- * done, done when every line is done (cancelled is left alone).
+ * done, done when every line is done (cancelled is left alone) —
+ * see lib/plan-status.ts.
  */
 
 function clean(value: unknown): string | null {
@@ -17,58 +19,6 @@ function clean(value: unknown): string | null {
 }
 
 const OUTCOMES = ['testing', 'adopted', 'rejected'];
-
-/**
- * A line counts as done when its linked order line is fully received
- * or done_at is set.
- */
-function isLineDone(
-  line: {
-    done_at: string | null;
-    purchase_order_items: { quantity_ordered: number; quantity_received: number } | null;
-  } | null,
-): boolean {
-  if (!line) return false;
-  if (line.done_at) return true;
-  const po = line.purchase_order_items;
-  return !!po && po.quantity_received >= po.quantity_ordered;
-}
-
-/** Recompute plan status from its lines. Cancelled plans are never
- * touched; draft stays draft until the admin approves it. */
-async function recomputePlanStatus(
-  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
-  planId: string,
-) {
-  const { data: plan } = await supabase
-    .from('purchase_plans')
-    .select('status')
-    .eq('id', planId)
-    .maybeSingle();
-
-  if (!plan || plan.status === 'cancelled' || plan.status === 'draft') return;
-
-  const { data: lines } = await supabase
-    .from('purchase_plan_lines')
-    .select('done_at, purchase_order_items(quantity_ordered, quantity_received)')
-    .eq('plan_id', planId);
-
-  const all = lines ?? [];
-  if (all.length === 0) return;
-
-  const anyExecuted = all.some(
-    (l) => l.done_at != null || l.purchase_order_items != null,
-  );
-  const allDone = all.every((l) => isLineDone(l as never));
-
-  let next: string | null = null;
-  if (allDone) next = 'done';
-  else if (anyExecuted && plan.status === 'approved') next = 'in_progress';
-
-  if (next && next !== plan.status) {
-    await supabase.from('purchase_plans').update({ status: next }).eq('id', planId);
-  }
-}
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
