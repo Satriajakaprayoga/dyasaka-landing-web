@@ -1,11 +1,9 @@
 import { Suspense } from "react";
-import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
-import type { Booking, Product } from "@/lib/types";
-import BookingsTable from "@/components/admin/BookingsTable";
+import BookingsView from "@/components/admin/BookingsView";
 import { Breadcrumbs, PageHeader, btnPrimary } from "@/components/admin/ui";
 import { PlusIcon } from "@/components/admin/icons";
-import { TableSkeleton } from "@/components/admin/skeletons";
+import { ProductTableRowsSkeleton } from "@/components/admin/skeletons";
 
 export default function BookingsListPage() {
   return (
@@ -22,21 +20,9 @@ export default function BookingsListPage() {
         </Link>
       </PageHeader>
 
-      <Suspense fallback={<TableSkeleton />}>
-        <BookingsList />
+      <Suspense fallback={<ProductTableRowsSkeleton rows={8} />}>
+        <BookingsView />
       </Suspense>
     </div>
   );
-}
-
-async function BookingsList() {
-  const supabase = await createServerSupabase();
-
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("*, products(name)")
-    .order("event_date", { ascending: true })
-    .returns<(Booking & { products: Pick<Product, "name"> | null })[]>();
-
-  return <BookingsTable rows={bookings ?? []} />;
 }

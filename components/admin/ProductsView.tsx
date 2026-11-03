@@ -12,6 +12,7 @@ import {
   useDebouncedValue,
   type ProductRow,
 } from "./useInfiniteProducts";
+import { useAdminViewMode, useInfiniteSentinel } from "./useInfiniteList";
 import { usePersistentFilters } from "./usePersistentFilters";
 import ConfirmModal, {
   ImpactBookingList,
@@ -94,32 +95,7 @@ export default function ProductsView() {
   // ---------- view mode ----------
   // Phones always get cards; larger screens use the persisted preference
   // (localStorage "productViewMode"), falling back to the table.
-  const [viewMode, setViewMode] = useState<"table" | "card">("table");
-  const [isPhone, setIsPhone] = useState(false);
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(VIEW_MODE_KEY);
-      if (saved === "card" || saved === "table") setViewMode(saved);
-    } catch {
-      // storage unavailable — default to table
-    }
-    const mq = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsPhone(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  const switchView = useCallback((mode: "table" | "card") => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, mode);
-    } catch {
-      // storage unavailable — in-memory state still applies
-    }
-  }, []);
-
-  const showCards = isPhone || viewMode === "card";
+  const { viewMode, switchView, showCards } = useAdminViewMode(VIEW_MODE_KEY);
 
   // Filter changes restart from batch 1 — scroll back to the top
   // (skipped on the initial mount).
@@ -249,45 +225,15 @@ export default function ProductsView() {
   );
 
   // ---------- infinite scroll sentinel ----------
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  // Primary trigger: load when the sentinel approaches the viewport.
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting) && !list.error) {
-          list.loadMore();
-        }
-      },
-      { rootMargin: "200px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [list.loadMore, list.error]);
-
-  // Catch-up trigger: right after a batch lands (or a delete thins the
-  // list) the sentinel may already be on screen with no new intersection
-  // event — IntersectionObserver only fires on changes, so re-check
-  // manually. Keeps loading until the viewport is filled or data ends.
-  useEffect(() => {
-    if (list.loading || list.loadingMore || list.error || !list.hasMore) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const raf = requestAnimationFrame(() => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top <= window.innerHeight + 200) list.loadMore();
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [
-    list.items,
-    list.loading,
-    list.loadingMore,
-    list.error,
-    list.hasMore,
-    list.loadMore,
-  ]);
+  // IntersectionObserver trigger + post-load catch-up (see the hook).
+  const sentinelRef = useInfiniteSentinel({
+    items: list.items,
+    loading: list.loading,
+    loadingMore: list.loadingMore,
+    error: list.error,
+    hasMore: list.hasMore,
+    loadMore: list.loadMore,
+  });
 
   // ---------- render ----------
   const hasFilters =

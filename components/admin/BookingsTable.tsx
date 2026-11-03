@@ -1,405 +1,167 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { Booking, BookingStatus, Product } from "@/lib/types";
-import { supabase } from "@/lib/supabase";
 import {
   BookingStatusBadge,
   Card,
-  EmptyState,
   ProjectStatusBadge,
+  Skeleton,
   formatDate,
-  inputClass,
 } from "./ui";
-import { usePersistentFilters } from "./usePersistentFilters";
-import Pagination from "./Pagination";
-import ConfirmModal, { ModalLinkRow } from "./ConfirmModal";
 import { EyeIcon, PencilIcon, TrashIcon } from "./icons";
 
-type Row = Booking & { products: Pick<Product, "name"> | null };
+export type BookingRow = Booking & { products: Pick<Product, "name"> | null };
 
-type Impact = { blocked: boolean; lines: { text: string; danger: boolean }[] };
+export const bookingStatusOptions: { value: BookingStatus; label: string }[] =
+  [
+    { value: "pending", label: "Pending" },
+    { value: "confirmed", label: "Confirmed" },
+    { value: "done", label: "Selesai" },
+    { value: "cancelled", label: "Dibatalkan" },
+  ];
 
-const statusOptions: { value: BookingStatus; label: string }[] = [
-  { value: "pending", label: "Pending" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "done", label: "Selesai" },
-  { value: "cancelled", label: "Dibatalkan" },
-];
+type Props = {
+  items: BookingRow[];
+  deletingId: string | null;
+  /** Id whose inline status select is mid-update. */
+  statusBusyId: string | null;
+  /** True while the next infinite-scroll batch is being fetched. */
+  loadingMore?: boolean;
+  onStatusChange: (b: BookingRow, status: BookingStatus) => void;
+  onDelete: (b: BookingRow) => void;
+};
 
-type PeriodFilter = "all" | "upcoming" | "past";
-
-export default function BookingsTable({ rows }: { rows: Row[] }) {
-  const router = useRouter();
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmRow, setConfirmRow] = useState<Row | null>(null);
-  const [impact, setImpact] = useState<Impact | null>(null);
-  const [filters, setFilter, resetFilters] = usePersistentFilters<{
-    q: string;
-    status: string;
-    period: string;
-    page: number;
-  }>("admin-bookings-filters", {
-    q: "",
-    status: "all",
-    period: "all",
-    page: 1,
-  });
-  const query = filters.q as string;
-  const statusFilter = filters.status as "all" | BookingStatus;
-  const periodFilter = filters.period as PeriodFilter;
-  const page = filters.page;
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  const filtered = rows.filter((b) => {
-    if (statusFilter !== "all" && b.status !== statusFilter) return false;
-    if (periodFilter === "upcoming" && b.event_date < today) return false;
-    if (periodFilter === "past" && b.event_date >= today) return false;
-
-    const q = query.trim().toLowerCase();
-    if (q) {
-      const haystack = [
-        b.customer_name,
-        b.phone,
-        b.theme ?? "",
-        b.products?.name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
-
-  const PAGE_SIZE = 10;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  );
-
-  function changePage(p: number) {
-    setFilter({ page: p });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function handleStatusChange(b: Row, status: BookingStatus) {
-    setBusyId(b.id);
-    setError(null);
-
-    const res = await fetch("/api/admin/bookings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: b.id, status }),
-    });
-    setBusyId(null);
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Gagal mengubah status");
-      return;
-    }
-
-    router.refresh();
-  }
-
-  // Deleting a booking cascades to booking_items + checklist_items and
-  // the capacity trigger recalculates the event date afterwards.
-  async function computeImpact(b: Row): Promise<Impact> {
-    const [items, checklist] = await Promise.all([
-      supabase
-        .from("booking_items")
-        .select("id", { count: "exact", head: true })
-        .eq("booking_id", b.id),
-      supabase
-        .from("checklist_items")
-        .select("id", { count: "exact", head: true })
-        .eq("booking_id", b.id),
-    ]);
-
-    const lines: Impact["lines"] = [];
-    if ((items.count ?? 0) > 0) {
-      lines.push({
-        text: `${items.count} item booking akan ikut terhapus.`,
-        danger: false,
-      });
-    }
-    if ((checklist.count ?? 0) > 0) {
-      lines.push({
-        text: `${checklist.count} baris checklist akan ikut terhapus.`,
-        danger: false,
-      });
-    }
-    if (b.status === "confirmed") {
-      lines.push({
-        text: "Booking confirmed — ketersediaan tanggal acara akan dihitung ulang.",
-        danger: false,
-      });
-    }
-    if (lines.length === 0) {
-      lines.push({ text: "Tidak ada data terkait — aman untuk dihapus.", danger: false });
-    }
-    return { blocked: false, lines };
-  }
-
-  function closeConfirm() {
-    setConfirmRow(null);
-    setImpact(null);
-  }
-
-  async function handleDeleteClick(b: Row) {
-    setConfirmRow(b);
-    setImpact(null);
-    setImpact(await computeImpact(b));
-  }
-
-  async function performDelete() {
-    if (!confirmRow) return;
-
-    setBusyId(confirmRow.id);
-    setError(null);
-
-    const res = await fetch(`/api/admin/bookings?id=${confirmRow.id}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      closeConfirm();
-      setBusyId(null);
-      setError(body.error ?? "Gagal menghapus booking");
-      return;
-    }
-
-    closeConfirm();
-    setBusyId(null);
-    router.refresh();
-  }
-
-  if (rows.length === 0) {
-    return (
-      <Card className="overflow-hidden">
-        <EmptyState
-          title="Belum ada booking"
-          subtitle="Catat booking pertama Anda untuk mulai mengelola jadwal."
-        >
-          <Link href="/admin/bookings/new" className="text-sm font-medium text-gray-900 underline underline-offset-4">
-            Tambah Booking
-          </Link>
-        </EmptyState>
-      </Card>
-    );
-  }
-
+// Desktop/tablet table view — presentation only. Data, filters and the
+// delete/status flows live in BookingsView.
+export default function BookingsTable({
+  items,
+  deletingId,
+  statusBusyId,
+  loadingMore = false,
+  onStatusChange,
+  onDelete,
+}: Props) {
   return (
-    <div className="space-y-3">
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-64">
-          <input
-            type="search"
-            placeholder="Cari customer, telepon, tema…"
-            value={query}
-            onChange={(e) => setFilter({ q: e.target.value, page: 1 })}
-            className={inputClass}
-          />
-        </div>
-        <div className="w-full sm:w-40">
-          <select
-            value={statusFilter}
-            onChange={(e) => setFilter({ status: e.target.value, page: 1 })}
-            className={inputClass}
-            aria-label="Filter status booking"
-          >
-            <option value="all">Semua Status</option>
-            {statusOptions.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="w-full sm:w-40">
-          <select
-            value={periodFilter}
-            onChange={(e) => setFilter({ period: e.target.value, page: 1 })}
-            className={inputClass}
-            aria-label="Filter periode acara"
-          >
-            <option value="all">Semua Periode</option>
-            <option value="upcoming">Akan Datang</option>
-            <option value="past">Sudah Lewat</option>
-          </select>
-        </div>
-        <span className="ml-auto text-xs text-gray-400">
-          {filtered.length} dari {rows.length} booking
-        </span>
-      </div>
-
-      {filtered.length === 0 ? (
-        <Card className="overflow-hidden">
-          <EmptyState
-            title="Tidak ada booking yang cocok"
-            subtitle="Coba ubah kata kunci atau reset filter."
-          >
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="text-sm font-medium text-gray-900 underline underline-offset-4"
-            >
-              Reset Filter
-            </button>
-          </EmptyState>
-        </Card>
-      ) : (
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Tanggal</th>
-                <th className="px-4 py-3 font-medium">Produk</th>
-                <th className="px-4 py-3 font-medium">Tema</th>
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Aksi</th>
+    <Card className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="sticky top-0 z-10 bg-gray-50 px-4 py-3 font-medium">
+                Tanggal
+              </th>
+              <th className="sticky top-0 z-10 bg-gray-50 px-4 py-3 font-medium">
+                Produk
+              </th>
+              <th className="sticky top-0 z-10 bg-gray-50 px-4 py-3 font-medium">
+                Tema
+              </th>
+              <th className="sticky top-0 z-10 bg-gray-50 px-4 py-3 font-medium">
+                Customer
+              </th>
+              <th className="sticky top-0 z-10 bg-gray-50 px-4 py-3 font-medium">
+                Status
+              </th>
+              {/* Fixed min-width so Detail/Ubah/Hapus never clip. */}
+              <th className="sticky top-0 z-10 min-w-[13rem] bg-gray-50 px-4 py-3 text-right font-medium">
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {items.map((b) => (
+              <tr key={b.id} className="transition hover:bg-gray-50">
+                <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
+                  <Link
+                    href={`/admin/bookings/${b.id}`}
+                    className="hover:underline underline-offset-2"
+                  >
+                    {formatDate(b.event_date)}
+                  </Link>
+                </td>
+                <td className="px-4 py-3 text-gray-600">
+                  {b.products?.name ?? "Custom"}
+                </td>
+                <td className="px-4 py-3 text-gray-600">{b.theme ?? "—"}</td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/admin/bookings/${b.id}`}
+                    className="font-medium text-gray-900 hover:underline underline-offset-2"
+                  >
+                    {b.customer_name}
+                  </Link>
+                  <div className="text-xs text-gray-400">{b.phone}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    value={b.status}
+                    disabled={statusBusyId === b.id}
+                    onChange={(e) =>
+                      onStatusChange(b, e.target.value as BookingStatus)
+                    }
+                    title="Ubah status"
+                    aria-label={`Ubah status booking ${b.customer_name}`}
+                    className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:opacity-50"
+                  >
+                    {bookingStatusOptions.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="mt-1.5 flex flex-col items-start gap-1">
+                    <BookingStatusBadge status={b.status} />
+                    <ProjectStatusBadge status={b.project_status} />
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <Link
+                      href={`/admin/bookings/${b.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <EyeIcon className="h-3.5 w-3.5" />
+                      Detail
+                    </Link>
+                    <Link
+                      href={`/admin/bookings/${b.id}/edit`}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                      Ubah
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(b)}
+                      disabled={deletingId === b.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      {deletingId === b.id ? "…" : "Hapus"}
+                    </button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {pageRows.map((b) => (
-                <tr key={b.id} className="transition hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
-                    <Link
-                      href={`/admin/bookings/${b.id}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {formatDate(b.event_date)}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {b.products?.name ?? "Custom"}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{b.theme ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/bookings/${b.id}`}
-                      className="font-medium text-gray-900 hover:underline underline-offset-2"
-                    >
-                      {b.customer_name}
-                    </Link>
-                    <div className="text-xs text-gray-400">{b.phone}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={b.status}
-                      disabled={busyId === b.id}
-                      onChange={(e) =>
-                        handleStatusChange(b, e.target.value as BookingStatus)
-                      }
-                      title="Ubah status"
-                      className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:opacity-50"
-                    >
-                      {statusOptions.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="mt-1.5 flex flex-col items-start gap-1">
-                      <BookingStatusBadge status={b.status} />
-                      <ProjectStatusBadge status={b.project_status} />
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Link
-                        href={`/admin/bookings/${b.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-                      >
-                        <EyeIcon className="h-3.5 w-3.5" />
-                        Detail
-                      </Link>
-                      <Link
-                        href={`/admin/bookings/${b.id}/edit`}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-                      >
-                        <PencilIcon className="h-3.5 w-3.5" />
-                        Ubah
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteClick(b)}
-                        disabled={busyId === b.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                        {busyId === b.id ? "…" : "Hapus"}
-                      </button>
+            ))}
+            {loadingMore &&
+              Array.from({ length: 3 }).map((_, i) => (
+                <tr key={`loading-${i}`} aria-hidden="true">
+                  <td colSpan={6} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                      <Skeleton className="hidden h-4 w-24 sm:block" />
+                      <Skeleton className="hidden h-5 w-20 rounded-full md:block" />
                     </div>
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-      )}
-      <Pagination
-        page={safePage}
-        totalPages={totalPages}
-        totalItems={filtered.length}
-        pageSize={PAGE_SIZE}
-        onPageChange={changePage}
-      />
-
-      <ConfirmModal
-        open={confirmRow !== null}
-        title={
-          confirmRow
-            ? `Hapus booking ${confirmRow.customer_name} (${formatDate(confirmRow.event_date)})?`
-            : ""
-        }
-        description="Tindakan ini tidak dapat dibatalkan."
-        busy={busyId !== null}
-        onConfirm={performDelete}
-        onClose={closeConfirm}
-      >
-        {!impact ? (
-          <p className="text-gray-500">Memeriksa relasi data…</p>
-        ) : (
-          <>
-            {impact.lines.map((line, i) => (
-              <p
-                key={i}
-                className={
-                  line.danger
-                    ? "font-medium text-red-600"
-                    : "text-gray-600"
-                }
-              >
-                {line.text}
-              </p>
-            ))}
-            {confirmRow && (
-              <ModalLinkRow
-                href={`/admin/bookings/${confirmRow.id}`}
-                main="Lihat detail booking"
-                sub={confirmRow.products?.name ?? "Custom"}
-              />
-            )}
-          </>
-        )}
-      </ConfirmModal>
-    </div>
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
