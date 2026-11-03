@@ -1,6 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+// PostgREST rejects non-uuid literals for uuid columns with a 400, so a
+// malformed category param is ignored instead of failing the whole list.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Paginated + filtered list for the admin products screen (infinite
+// scroll). Query params: page, limit, search, category (id), status.
+export async function GET(req: NextRequest) {
+  const supabase = await createServerSupabase();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const sp = new URL(req.url).searchParams;
+  const page = Math.max(1, Number(sp.get('page')) || 1);
+  const limit = Math.min(50, Math.max(1, Number(sp.get('limit')) || 12));
+  const search = (sp.get('search') ?? '').trim();
+  const category = sp.get('category') ?? '';
+  const status = sp.get('status') ?? 'all';
+
+  let query = supabase
+    .from('products')
+    .select('*, categories(name), product_images(image_url, sort_order)', {
+      count: 'exact',
+    })
+    .order('created_at', { ascending: false });
+
+  if (search) {
+    // PostgREST or= patterns treat commas/parens as filter syntax —
+    // strip them so user input can't break the expression.
+    const safe = search.replace(/[,()%\\]/g, ' ');
+    query = query.or(`name.ilike.%${safe}%,description.ilike.%${safe}%`);
+  }
+  if (category && UUID_RE.test(category)) {
+    query = query.eq('category_id', category);
+  }
+  if (status === 'active') query = query.eq('is_active', true);
+  if (status === 'inactive') query = query.eq('is_active', false);
+
+  const from = (page - 1) * limit;
+  const { data, error, count } = await query.range(from, from + limit - 1);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const total = count ?? 0;
+  return NextResponse.json({
+    items: data ?? [],
+    total,
+    hasMore: from + (data?.length ?? 0) < total,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
 

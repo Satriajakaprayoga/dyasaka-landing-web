@@ -126,3 +126,57 @@ export function BookingPanelsSkeleton() {
     </div>
   );
 }
+
+// ---------- Products list ----------
+
+// Table-area fallback without the toolbar (ProductsView renders its own
+// live toolbar above it while the first batch is loading).
+export function ProductTableRowsSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <Card aria-busy="true" className="overflow-hidden">
+      <div className="space-y-4 p-4">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+            <Skeleton className="hidden h-4 w-20 sm:block" />
+            <Skeleton className="hidden h-4 w-16 md:block" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+export function ProductCardsSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div
+      aria-busy="true"
+      className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+            <Skeleton className="h-4 min-w-0 flex-1" />
+            <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
+          </div>
+          <Skeleton className="mt-2 h-3 w-4/5" />
+          <Skeleton className="mt-2 h-5 w-20 rounded-full" />
+          <Skeleton className="mt-3 h-5 w-28" />
+          <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3 md:justify-end">
+            <Skeleton className="h-11 flex-1 rounded-lg md:h-9 md:w-24" />
+            <Skeleton className="h-11 flex-1 rounded-lg md:h-9 md:w-24" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

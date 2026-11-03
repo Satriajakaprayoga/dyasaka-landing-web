@@ -1,11 +1,9 @@
 import { Suspense } from "react";
-import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
-import type { Category, Product, ProductImage } from "@/lib/types";
-import ProductsTable from "@/components/admin/ProductsTable";
+import ProductsView from "@/components/admin/ProductsView";
 import { Breadcrumbs, PageHeader, btnPrimary } from "@/components/admin/ui";
 import { PlusIcon } from "@/components/admin/icons";
-import { TableSkeleton } from "@/components/admin/skeletons";
+import { ProductTableRowsSkeleton } from "@/components/admin/skeletons";
 
 export default function ProductsListPage() {
   return (
@@ -22,26 +20,11 @@ export default function ProductsListPage() {
         </Link>
       </PageHeader>
 
-      <Suspense fallback={<TableSkeleton />}>
-        <ProductsList />
+      {/* ProductsView uses useSearchParams (filter persistence) and loads
+          data client-side, so it needs a Suspense boundary. */}
+      <Suspense fallback={<ProductTableRowsSkeleton rows={8} />}>
+        <ProductsView />
       </Suspense>
     </div>
   );
-}
-
-async function ProductsList() {
-  const supabase = await createServerSupabase();
-
-  const { data: products } = await supabase
-    .from("products")
-    .select("*, categories(name), product_images(image_url, sort_order)")
-    .order("created_at", { ascending: false })
-    .returns<
-      (Product & {
-        categories: Pick<Category, "name">;
-        product_images: Pick<ProductImage, "image_url" | "sort_order">[];
-      })[]
-    >();
-
-  return <ProductsTable rows={products ?? []} />;
 }
