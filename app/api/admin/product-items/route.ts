@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 
 /**
  * Admin-only CRUD for product recipes ("Isi Paket").
@@ -48,6 +49,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Recipe rows render in "Paket Termasuk" on the product page.
+  await revalidatePublicCatalog();
   return NextResponse.json({ product_item: data }, { status: 201 });
 }
 
@@ -91,6 +94,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ product_item: data });
 }
 
@@ -121,5 +125,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ ok: true });
 }

@@ -9,12 +9,21 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
-// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
-// to no-store, but force-no-store pins it explicitly so the supabase
-// calls can never land in the Data Cache and this page can never show
-// stale product data after admin edits.
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+// On-demand static: active products are prerendered at build; ids not
+// in that snapshot (new products, reactivated ones) render on first
+// request and are then cached. Pages stay cached with no TTL —
+// regenerated only when an admin mutation calls
+// revalidatePublicCatalog() (lib/revalidate-public.ts), which purges
+// every /product/[id] page at once. No time-based staleness.
+export async function generateStaticParams() {
+  const { data } = await supabase
+    .from('products')
+    // Explicit columns — anon only has column-level SELECT on products.
+    .select('id')
+    .eq('is_active', true);
+
+  return (data ?? []).map((p) => ({ id: p.id }));
+}
 
 const BUSINESS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_WA_NUMBER ?? '';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;

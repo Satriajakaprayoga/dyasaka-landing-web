@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 
 // PostgREST rejects non-uuid literals for uuid columns with a 400, so a
 // malformed category param is ignored instead of failing the whole list.
@@ -98,6 +99,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // New product may now appear on the landing/catalog.
+  await revalidatePublicCatalog();
   return NextResponse.json({ product: data }, { status: 201 });
 }
 
@@ -150,6 +153,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Name/price/active state all render on the public pages.
+  await revalidatePublicCatalog();
   return NextResponse.json({ product: data });
 }
 
@@ -201,5 +206,7 @@ export async function DELETE(req: NextRequest) {
     await supabase.storage.from('product-images').remove(paths);
   }
 
+  // Product gone — its page must 404 and the landing/catalog refresh.
+  await revalidatePublicCatalog();
   return NextResponse.json({ ok: true });
 }

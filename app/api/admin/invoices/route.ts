@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidateInvoices } from '@/lib/revalidate-public';
 import type { InvoiceLineSource } from '@/lib/types';
 
 /**
@@ -486,6 +487,9 @@ export async function PATCH(req: NextRequest) {
         .single();
 
       if (!issueError) {
+        // Issue flips the public page from 404 (drafts are invisible)
+        // to a live invoice — purge the cached 404.
+        await revalidateInvoices();
         return NextResponse.json({ invoice: updated, items });
       }
       if (issueError.code !== '23505' || attempt === 5) {
@@ -575,6 +579,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: updError.message }, { status: 500 });
     }
 
+    // amount_paid / balance_due / status render live on the public
+    // page — purge so it can't keep showing the pre-payment figures.
+    await revalidateInvoices();
     return NextResponse.json({
       invoice: updated,
       transaction,
@@ -603,6 +610,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Void turns the old token's page into the "replaced" notice —
+    // purge the cached full invoice.
+    await revalidateInvoices();
     return NextResponse.json({ invoice: updated });
   }
 

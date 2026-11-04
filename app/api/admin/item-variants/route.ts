@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { revalidatePublicCatalog } from "@/lib/revalidate-public";
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
@@ -62,6 +63,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Variant color/size render in recipe details on product pages.
+  await revalidatePublicCatalog();
   return NextResponse.json({ variant: data }, { status: 201 });
 }
 
@@ -139,6 +142,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ variant: data });
 }
 
@@ -176,5 +180,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ ok: true });
 }

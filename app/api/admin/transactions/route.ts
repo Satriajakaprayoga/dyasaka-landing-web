@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidateInvoices } from '@/lib/revalidate-public';
 
 /**
  * Append-only money ledger (§12). No DELETE export — a mistake is
@@ -256,6 +257,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // A ledger row linked to an invoice changes its public amount_paid /
+  // balance_due (computed from these rows by the RPC).
+  if (row.invoice_id) {
+    await revalidateInvoices();
+  }
+
   return NextResponse.json({ transaction: data }, { status: 201 });
 }
 
@@ -373,6 +380,11 @@ export async function PATCH(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Reversing a payment row changes the invoice's public paid figures.
+  if (original.invoice_id) {
+    await revalidateInvoices();
   }
 
   return NextResponse.json({ transaction: created }, { status: 201 });

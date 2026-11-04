@@ -34,37 +34,43 @@ export default function ProductCardList({
             key={p.id}
             className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md"
           >
-            <div className="flex items-center gap-3">
-              {cover ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={cover.image_url}
-                  alt={p.name}
-                  className="h-10 w-10 shrink-0 rounded-lg border border-gray-200 object-cover"
-                />
-              ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
-                  <PackageIcon className="h-4 w-4" />
-                </span>
-              )}
-              <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
-                {p.name}
-              </p>
-              <Badge tone={p.is_active ? "green" : "gray"}>
-                {p.is_active ? "Aktif" : "Nonaktif"}
-              </Badge>
+            <div className="flex justify-between gap-3">
+              <div className="flex items-start gap-3 ">
+                {cover ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cover.image_url}
+                    alt={p.name}
+                    className="h-10 w-10 shrink-0 rounded-lg border border-gray-200 object-cover"
+                  />
+                ) : (
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
+                    <PackageIcon className="h-4 w-4" />
+                  </span>
+                )}
+                <div>
+                  {/* title */}
+                  <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
+                    {p.name}
+                  </p>
+                  {p.categories?.name && (
+                    <span className="mt-2 self-start rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                      {p.categories.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <Badge tone={p.is_active ? "green" : "gray"}>
+                  {p.is_active ? "Aktif" : "Nonaktif"}
+                </Badge>
+              </div>
             </div>
 
             {p.description && (
               <p className="mt-2 line-clamp-2 text-xs text-gray-400">
                 {p.description}
               </p>
-            )}
-
-            {p.categories?.name && (
-              <span className="mt-2 self-start rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                {p.categories.name}
-              </span>
             )}
 
             <div className="mt-3">

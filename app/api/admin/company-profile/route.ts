@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidateInvoices } from '@/lib/revalidate-public';
 
 /**
  * Admin-only. Edits the single company profile row (§8). There is no
@@ -75,5 +76,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Address / phone / email / logo render LIVE on public invoice pages
+  // (only company_name is snapshotted at issue time).
+  await revalidateInvoices();
   return NextResponse.json({ profile: data });
 }

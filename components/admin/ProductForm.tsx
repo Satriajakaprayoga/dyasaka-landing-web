@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { revalidatePublicCatalog } from "@/lib/revalidate-public";
 import type { Category, Product, ProductImage, Vendor } from "@/lib/types";
 import { Card, btnPrimary, btnSecondary, inputClass, labelClass } from "./ui";
 import { ImageIcon, PlusIcon } from "./icons";
@@ -331,6 +332,11 @@ export default function ProductForm({ categories, vendors, product }: Props) {
         failures.push(`• ${files[i].name}: ${result.message}`);
         failedFiles.push(files[i]);
       }
+
+      // Photos are written through the browser supabase client (steps
+      // 2-4), so the API route can't purge for us — do it here, after
+      // the last write and before the partial-failure early return.
+      await revalidatePublicCatalog();
 
       if (failures.length > 0) {
         // Stay on the page with the failed files still selected so the user

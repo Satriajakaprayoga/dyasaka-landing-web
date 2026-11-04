@@ -4,7 +4,7 @@
 | --- | --- |
 | **URL** | `/catalog` |
 | **Access** | Public |
-| **Rendering** | Dynamic Server Component (`ƒ`), filters via URL search params + one client island (`SortSelect`) |
+| **Rendering** | Dynamic Server Component (`ƒ`), filters via URL search params + one client island (`SortSelect`); DB layer cached in the Data Cache |
 | **Source** | `app/(public)/catalog/page.tsx`, `app/(public)/catalog/SortSelect.tsx` |
 
 ## Purpose
@@ -37,6 +37,15 @@ Changing any form filter naturally drops `page` (fresh GET submission), so a new
 
 - `categories` — all rows for the pills.
 - `products` + `product_images(image_url, sort_order)` + `categories(name)` — filtered as above. Cover image = lowest `sort_order`; category name shown as a small label on each card.
+
+Both queries run through `unstable_cache` under the `catalog-data` tag:
+the page still renders per request (searchParams force dynamic
+rendering), but repeat views skip the Supabase roundtrips. Every
+admin mutation calls `revalidateTag('catalog-data', 'max')` via
+`revalidatePublicCatalog()` (lib/revalidate-public.ts), so a cached
+combination never outlives the data it came from — no TTL. `page`
+is deliberately not part of the cache key: the query fetches the full
+filtered set and the page slices it.
 
 ## Card & UX details
 

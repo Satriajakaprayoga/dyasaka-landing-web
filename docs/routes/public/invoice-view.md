@@ -4,7 +4,7 @@
 | --- | --- |
 | **URL** | `/invoice/[token]` (app root — standalone, like `/offline`) |
 | **Access** | Public, unguessable `access_token` (64-hex, DB default `gen_random_bytes(32)` hex); no login |
-| **Rendering** | Dynamic Server Component (`ƒ`) + `PrintButton` client component |
+| **Rendering** | On-demand ISR (`●` — cached per token, no TTL) + `PrintButton` client component |
 | **Source** | `app/invoice/[token]/page.tsx`, `app/invoice/[token]/PrintButton.tsx` |
 
 ## Access rules
@@ -23,10 +23,17 @@
     non-void invoice of the same type, when one exists.
   - `draft` / unknown → null, indistinguishable → `notFound()` (plain
     404, reveals nothing about other invoices).
-- `force-dynamic` + `fetchCache = "force-no-store"` — a customer can
-  never see totals from before a correction (payments now change
-  amounts without touching the frozen invoice row, so this matters
-  more than ever).
+- On-demand ISR, not per-request SSR: the data path needs no login
+  (the RPC is security-definer, `company_profile` is public), so the
+  page reads through the plain anon client and caches per token with
+  no TTL. A customer can never see totals from before a correction
+  because every write that changes the page purges it via
+  `revalidateInvoices()` (lib/revalidate-public.ts): issue (404 →
+  live page), `record-payment` and ledger `in` rows carrying
+  `invoice_id` (amount_paid/balance_due/status), void (replaced
+  notice), and company-profile edits (address/phone/email/logo render
+  live). `generateStaticParams` returns `[]` — tokens are minted at
+  runtime, so each renders on first request and caches.
 - `company_profile` is read directly (public SELECT by design) so the
   logo/contact header stays live — the invoice's company name and
   bill-to fields are snapshotted at issue.

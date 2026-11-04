@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 import type { ItemType } from '@/lib/types';
 
 const itemTypes: ItemType[] = ['consumable', 'rentable'];
@@ -154,6 +155,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Item names render in recipe details ("Paket Termasuk").
+  await revalidatePublicCatalog();
   return NextResponse.json({ item: data }, { status: 201 });
 }
 
@@ -201,6 +204,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ item: data });
 }
 
@@ -238,5 +242,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await revalidatePublicCatalog();
   return NextResponse.json({ ok: true });
 }

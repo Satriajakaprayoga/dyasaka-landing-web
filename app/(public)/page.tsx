@@ -16,12 +16,9 @@ import type { LandingProduct } from '@/components/landing/ProductCard';
 
 const FEATURED_LIMIT = 6;
 
-// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
-// to no-store, but force-no-store pins it explicitly so the
-// featured-products fetch can never land in the Data Cache and the
-// landing can never show stale prices after admin edits.
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+// On-demand static: prerendered with no TTL — regenerated only when an
+// admin mutation calls revalidatePublicCatalog() (lib/revalidate-public.ts).
+// No time-based staleness window; edits purge the cache explicitly.
 
 export const metadata: Metadata = {
   title: {

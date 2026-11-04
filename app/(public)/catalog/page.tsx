@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { unstable_cache } from 'next/cache';
 import type { Category, Product, ProductImage } from '@/lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -7,12 +8,15 @@ import SortSelect from './SortSelect';
 import { SORT_OPTIONS } from './sort-options';
 import { BalloonIcon } from '@/components/BalloonIcon';
 
-// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
-// to no-store, but force-no-store pins it explicitly so the supabase
-// calls can never land in the Data Cache (.next/cache/fetch-cache) and
-// the catalog can never show stale products after admin edits.
+// Cannot use the Full Route Cache: this page awaits searchParams
+// (filters, sort, pagination), which forces per-request rendering.
+// What IS cached is the data layer — the two Supabase queries below
+// run through unstable_cache under the 'catalog-data' tag, so repeat
+// views skip the DB roundtrips. Every admin mutation calls
+// revalidateTag('catalog-data') via revalidatePublicCatalog()
+// (lib/revalidate-public.ts), so cached combinations never outlive
+// the data they came from — no time-based staleness.
 export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
 
 export const metadata: Metadata = {
   title: { absolute: 'Katalog — Dyasaka Decoration' },
@@ -56,61 +60,75 @@ function buildHref(
   return `/catalog${qs ? `?${qs}` : ''}`;
 }
 
-async function getCategories() {
-  const { data } = await supabase.from('categories').select('*').returns<Category[]>();
-  return data ?? [];
-}
+// Data-cache wrappers. unstable_cache folds the arguments into the
+// cache key, so each filter combination gets its own entry; all of
+// them share the 'catalog-data' tag for the mutation purge.
+const getCategories = unstable_cache(
+  async () => {
+    const { data } = await supabase.from('categories').select('*').returns<Category[]>();
+    return data ?? [];
+  },
+  ['catalog-categories'],
+  { tags: ['catalog-data'] },
+);
 
-async function getProducts(params: SearchParams) {
-  let query = supabase
-    .from('products')
-    // Explicit columns — anon only has column-level SELECT on products
-    // (migration 20261025100000); `select=*` fails with permission denied.
-    .select(
-      'id, category_id, name, description, price, is_active, created_at, updated_at, product_images(image_url, sort_order), categories(name)',
-    )
-    .eq('is_active', true);
+// page is deliberately NOT part of the key: the query fetches the full
+// filtered set and the page component slices it, so /catalog?page=1
+// and ?page=2 share one cached entry.
+const getProducts = unstable_cache(
+  async (filters: Pick<SearchParams, 'q' | 'category' | 'min_price' | 'max_price' | 'sort'>) => {
+    let query = supabase
+      .from('products')
+      // Explicit columns — anon only has column-level SELECT on products
+      // (migration 20261025100000); `select=*` fails with permission denied.
+      .select(
+        'id, category_id, name, description, price, is_active, created_at, updated_at, product_images(image_url, sort_order), categories(name)',
+      )
+      .eq('is_active', true);
 
-  if (params.category) {
-    query = query.eq('category_id', params.category);
-  }
+    if (filters.category) {
+      query = query.eq('category_id', filters.category);
+    }
 
-  const minPrice = Number(params.min_price);
-  if (params.min_price && Number.isFinite(minPrice)) {
-    query = query.gte('price', minPrice);
-  }
-  const maxPrice = Number(params.max_price);
-  if (params.max_price && Number.isFinite(maxPrice)) {
-    query = query.lte('price', maxPrice);
-  }
+    const minPrice = Number(filters.min_price);
+    if (filters.min_price && Number.isFinite(minPrice)) {
+      query = query.gte('price', minPrice);
+    }
+    const maxPrice = Number(filters.max_price);
+    if (filters.max_price && Number.isFinite(maxPrice)) {
+      query = query.lte('price', maxPrice);
+    }
 
-  // Keep only letters/numbers/spaces so the or() filter syntax can't be broken
-  const q = params.q?.replace(/[^\p{L}\p{N}\s-]/gu, ' ').trim();
-  if (q) {
-    const conditions = q
-      .split(/\s+/)
-      .flatMap((term) => [`name.ilike.%${term}%`, `description.ilike.%${term}%`])
-      .join(',');
-    query = query.or(conditions);
-  }
+    // Keep only letters/numbers/spaces so the or() filter syntax can't be broken
+    const q = filters.q?.replace(/[^\p{L}\p{N}\s-]/gu, ' ').trim();
+    if (q) {
+      const conditions = q
+        .split(/\s+/)
+        .flatMap((term) => [`name.ilike.%${term}%`, `description.ilike.%${term}%`])
+        .join(',');
+      query = query.or(conditions);
+    }
 
-  switch (params.sort) {
-    case 'price_asc':
-      query = query.order('price', { ascending: true }).order('created_at', { ascending: false });
-      break;
-    case 'price_desc':
-      query = query.order('price', { ascending: false }).order('created_at', { ascending: false });
-      break;
-    case 'name':
-      query = query.order('name', { ascending: true }).order('created_at', { ascending: false });
-      break;
-    default:
-      query = query.order('created_at', { ascending: false });
-  }
+    switch (filters.sort) {
+      case 'price_asc':
+        query = query.order('price', { ascending: true }).order('created_at', { ascending: false });
+        break;
+      case 'price_desc':
+        query = query.order('price', { ascending: false }).order('created_at', { ascending: false });
+        break;
+      case 'name':
+        query = query.order('name', { ascending: true }).order('created_at', { ascending: false });
+        break;
+      default:
+        query = query.order('created_at', { ascending: false });
+    }
 
-  const { data } = await query;
-  return (data ?? []) as unknown as ProductRow[];
-}
+    const { data } = await query;
+    return (data ?? []) as unknown as ProductRow[];
+  },
+  ['catalog-products'],
+  { tags: ['catalog-data'] },
+);
 
 function SearchIcon({ className }: { className?: string }) {
   return (
@@ -141,7 +159,16 @@ export default async function CatalogPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
   const searchParams = await props.searchParams;
-  const [categories, products] = await Promise.all([getCategories(), getProducts(searchParams)]);
+  const [categories, products] = await Promise.all([
+    getCategories(),
+    getProducts({
+      q: searchParams.q,
+      category: searchParams.category,
+      min_price: searchParams.min_price,
+      max_price: searchParams.max_price,
+      sort: searchParams.sort,
+    }),
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
   const page = Math.min(Math.max(1, Number(searchParams.page) || 1), totalPages);

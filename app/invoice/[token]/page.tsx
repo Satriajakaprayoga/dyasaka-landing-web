@@ -1,4 +1,4 @@
-import { createServerSupabase } from "@/lib/supabase-server";
+import { supabase } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import type { CompanyProfile, Invoice, InvoiceItem, InvoiceStatus } from "@/lib/types";
 import {
@@ -9,12 +9,21 @@ import {
 } from "@/components/admin/ui";
 import PrintButton from "./PrintButton";
 
-// Belt-and-suspenders, kept from the Next 14 era: Next 15+ defaults fetch
-// to no-store, but force-no-store pins it explicitly so the invoice fetch
-// can never land in the Data Cache and a customer can never see totals
-// from before an admin correction.
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
+// On-demand static (ISR): the page renders identically for every
+// visitor — the token IS the capability — so it caches per token with
+// no TTL. The data path needs no login: get_invoice_by_token is a
+// security-definer RPC (anon EXECUTE) and company_profile is anon-
+// readable, so the plain anon client works and cookies() never runs.
+// Stale copies are purged by revalidateInvoices() (lib/revalidate-
+// public.ts) from the invoice mutations (issue / record-payment /
+// void) and ledger writes carrying invoice_id — so a cached invoice
+// never keeps saying "unpaid" after a payment lands.
+export async function generateStaticParams() {
+  // Intentionally empty: every token renders on first request and is
+  // then cached. Prerendering at build adds nothing — invoices are
+  // issued at runtime, so new tokens never exist at build time.
+  return [];
+}
 
 export const metadata = {
   title: "Invoice",
@@ -53,7 +62,6 @@ export default async function PublicInvoicePage(props: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await props.params;
-  const supabase = await createServerSupabase();
 
   // Public read path: ONLY the security-definer RPC — anon has no
   // select on invoices. Unknown/draft/void tokens all return null →
