@@ -7,6 +7,56 @@ function clean(value: unknown): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
+// Paginated list for the admin vendors screen (infinite scroll). Query
+// params: page, limit, search (name, phone, note).
+export async function GET(req: NextRequest) {
+  const supabase = await createServerSupabase();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const sp = new URL(req.url).searchParams;
+  const page = Math.max(1, Number(sp.get('page')) || 1);
+  const limit = Math.min(50, Math.max(1, Number(sp.get('limit')) || 12));
+  const search = (sp.get('search') ?? '').trim();
+
+  // id tiebreaker keeps pagination deterministic — same-name rows
+  // would otherwise shuffle between batches.
+  let query = supabase
+    .from('vendors')
+    .select('*', { count: 'exact' })
+    .order('name')
+    .order('id');
+
+  if (search) {
+    // Strip commas/parens/backslashes — or= patterns treat them as
+    // filter syntax, so user input could otherwise break the expression.
+    const safe = search.replace(/[,()%\\]/g, ' ');
+    query = query.or(
+      `name.ilike.%${safe}%,phone.ilike.%${safe}%,note.ilike.%${safe}%`,
+    );
+  }
+
+  const from = (page - 1) * limit;
+  const { data, error, count } = await query.range(from, from + limit - 1);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const total = count ?? 0;
+  return NextResponse.json({
+    items: data ?? [],
+    total,
+    hasMore: from + (data?.length ?? 0) < total,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
 

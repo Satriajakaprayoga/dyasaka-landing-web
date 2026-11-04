@@ -45,6 +45,12 @@ function buildUrl(
 }
 
 /**
+ * Extra response fields beyond items/total/hasMore (e.g. the ledger's
+ * server-side totals) — handed to the optional onData observer.
+ */
+export type ListDataExtras = Record<string, unknown>;
+
+/**
  * Infinite-scroll data source for admin lists backed by a paginated
  * GET endpoint (`{ items, total, hasMore }`): one batch per request,
  * appended to `items` (never replaced).
@@ -55,11 +61,17 @@ function buildUrl(
  *
  * The filters object may be an inline literal — a normalized JSON key
  * is used as the effect dependency instead of object identity.
+ *
+ * `opts.onData` (kept in a ref — identity doesn't matter) observes the
+ * parsed response body of every successful load, and `reload()`
+ * refetches page 1 in place — for after mutations that change ordering
+ * or response extras the list can't patch locally.
  */
 export function useInfiniteList<T extends { id: string }>(
   endpoint: string,
   filters: InfiniteFilters,
   pageSize = 12,
+  opts?: { onData?: (body: ListDataExtras) => void },
 ) {
   const [items, setItems] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
@@ -75,6 +87,11 @@ export function useInfiniteList<T extends { id: string }>(
   // so a ref is needed to guarantee no duplicate requests.
   const inFlightRef = useRef(false);
   const [reloadTick, setReloadTick] = useState(0);
+
+  const onDataRef = useRef(opts?.onData);
+  useEffect(() => {
+    onDataRef.current = opts?.onData;
+  });
 
   const filterKey = JSON.stringify(normalizeFilters(filters));
 
@@ -104,6 +121,7 @@ export function useInfiniteList<T extends { id: string }>(
         setTotal(body.total ?? 0);
         setPage(1);
         setHasMore(Boolean(body.hasMore));
+        onDataRef.current?.(body);
       } catch {
         if (ac.signal.aborted || reqId !== reqIdRef.current) return;
         setError(true);
@@ -147,6 +165,7 @@ export function useInfiniteList<T extends { id: string }>(
         setTotal(body.total ?? 0);
         setPage((p) => p + 1);
         setHasMore(Boolean(body.hasMore));
+        onDataRef.current?.(body);
         setError(false);
       } catch {
         if (ac.signal.aborted || reqId !== reqIdRef.current) return;
@@ -185,6 +204,12 @@ export function useInfiniteList<T extends { id: string }>(
     );
   }, []);
 
+  // Full refetch from page 1 in place — for mutations that change
+  // ordering (name-sorted lists) or response extras (ledger totals).
+  const reload = useCallback(() => {
+    setReloadTick((t) => t + 1);
+  }, []);
+
   return {
     items,
     total,
@@ -194,6 +219,7 @@ export function useInfiniteList<T extends { id: string }>(
     error,
     loadMore,
     retry,
+    reload,
     removeLocal,
     updateLocal,
   };

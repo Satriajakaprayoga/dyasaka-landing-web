@@ -20,6 +20,131 @@ function dateOrNull(value: unknown): string | null {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Paginated + filtered list for the admin ledger screen (infinite
+// scroll). Query params: page, limit, month (YYYY-MM), direction
+// (in | out), category (uuid).
+//
+// Besides the page rows, the response carries totals computed over the
+// WHOLE filtered set (PostgREST cannot SUM — direction/amount rows are
+// fetched in chunks and summed in JS) and the ids of rows reversed by
+// any later row, so badges stay correct across month boundaries.
+export async function GET(req: NextRequest) {
+  const supabase = await createServerSupabase();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const sp = new URL(req.url).searchParams;
+  const page = Math.max(1, Number(sp.get('page')) || 1);
+  const limit = Math.min(50, Math.max(1, Number(sp.get('limit')) || 15));
+  const month = sp.get('month') ?? '';
+  const direction = sp.get('direction') ?? '';
+  const category = (sp.get('category') ?? '').trim();
+
+  const monthValid = /^\d{4}-\d{2}$/.test(month);
+  const directionValid = direction === 'in' || direction === 'out';
+
+  // "YYYY-MM" → inclusive date range; the last day comes from
+  // Date.UTC(year, month, 0) — day 0 of the next month.
+  let monthStart: string | null = null;
+  let monthEnd: string | null = null;
+  if (monthValid) {
+    const [y, m] = month.split('-').map(Number);
+    monthStart = `${month}-01`;
+    monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  }
+
+  type Totals = { masuk: number; keluar: number; net: number };
+  async function computeTotals(): Promise<Totals> {
+    const totals: Totals = { masuk: 0, keluar: 0, net: 0 };
+    const CHUNK = 1000; // PostgREST default max rows
+    let from = 0;
+    for (;;) {
+      let q = supabase.from('transactions').select('direction, amount').order('id');
+      if (monthStart && monthEnd) {
+        q = q.gte('transaction_date', monthStart).lte('transaction_date', monthEnd);
+      }
+      if (directionValid) q = q.eq('direction', direction);
+      if (category) q = q.eq('category_id', category);
+      const { data, error } = await q.range(from, from + CHUNK - 1);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        if (row.direction === 'in') totals.masuk += Number(row.amount);
+        else totals.keluar += Number(row.amount);
+      }
+      if ((data?.length ?? 0) < CHUNK) break;
+      from += CHUNK;
+    }
+    totals.net = totals.masuk - totals.keluar;
+    return totals;
+  }
+
+  async function computeTotalsSafe(): Promise<Totals | { error: { message: string } }> {
+    try {
+      return await computeTotals();
+    } catch (err) {
+      return { error: err as { message: string } };
+    }
+  }
+
+  let mainQuery = supabase
+    .from('transactions')
+    .select('*, category:transaction_categories(name)', { count: 'exact' })
+    // id tiebreaker keeps pagination deterministic — same-second rows
+    // would otherwise shuffle between batches.
+    .order('transaction_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id');
+  if (monthStart && monthEnd) {
+    mainQuery = mainQuery
+      .gte('transaction_date', monthStart)
+      .lte('transaction_date', monthEnd);
+  }
+  if (directionValid) mainQuery = mainQuery.eq('direction', direction);
+  if (category) mainQuery = mainQuery.eq('category_id', category);
+
+  const from = (page - 1) * limit;
+
+  const [main, totalsRes, reversed] = await Promise.all([
+    mainQuery.range(from, from + limit - 1),
+    computeTotalsSafe(),
+    // Reversal markers: tiny set (one row per mistake ever made), so
+    // fetch the whole thing to keep badges correct on every filter.
+    supabase
+      .from('transactions')
+      .select('reverses_transaction_id')
+      .not('reverses_transaction_id', 'is', null),
+  ]);
+
+  if (main.error) {
+    return NextResponse.json({ error: main.error.message }, { status: 500 });
+  }
+  if ('error' in totalsRes) {
+    return NextResponse.json({ error: totalsRes.error.message }, { status: 500 });
+  }
+  if (reversed.error) {
+    return NextResponse.json({ error: reversed.error.message }, { status: 500 });
+  }
+
+  const data = main.data ?? [];
+  const total = main.count ?? 0;
+
+  return NextResponse.json({
+    items: data,
+    total,
+    hasMore: from + data.length < total,
+    totals: totalsRes,
+    reversedIds: (reversed.data ?? [])
+      .map((r) => r.reverses_transaction_id)
+      .filter((id): id is string => id != null),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
 

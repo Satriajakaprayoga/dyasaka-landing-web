@@ -180,3 +180,25 @@ export function ProductCardsSkeleton({ count = 6 }: { count?: number }) {
     </div>
   );
 }
+
+// ---------- ul-list pages (ledger, categories, staff, vendors, suppliers) ----------
+
+// Card of icon + name/sub rows — the shell Suspense fallback above
+// each View's own live skeleton.
+export function ListRowsSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <Card aria-busy="true">
+      <div className="space-y-4 p-4">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
