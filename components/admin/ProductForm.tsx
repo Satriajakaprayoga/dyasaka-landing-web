@@ -510,6 +510,13 @@ export default function ProductForm({ categories, vendors, product }: Props) {
           )}
         </div>
 
+        {!isEdit && (
+          <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+            Setelah produk tersimpan, Anda bisa menambahkan item atau isi
+            paket dalam produk.
+          </p>
+        )}
+
         {error && (
           <p className="whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}

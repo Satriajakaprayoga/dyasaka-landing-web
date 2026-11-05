@@ -1,8 +1,127 @@
 "use client";
 
+import { useState } from "react";
 import type { ProductRow } from "./useInfiniteProducts";
 import { Badge, Skeleton, formatRupiah } from "./ui";
 import { PackageIcon, PencilIcon, TrashIcon } from "./icons";
+
+type RecipeDetailRow = {
+  id: string;
+  quantity: number;
+  is_included: boolean;
+  is_show_public: boolean;
+  item_variants: {
+    color: string | null;
+    size: string | null;
+    items: { name: string } | null;
+  } | null;
+};
+
+function recipeTitle(row: RecipeDetailRow) {
+  const v = row.item_variants;
+  const name = v?.items?.name ?? "Varian";
+  const details = [v?.color, v?.size].filter(Boolean).join(", ");
+  return details ? `${name} (${details})` : name;
+}
+
+/**
+ * Collapsible "Isi Paket" preview inside a product card — same
+ * details/summary pattern as the inventory variant history. Lazy:
+ * the recipe is fetched from GET /api/admin/product-items the first
+ * time the card expands, then cached in state for re-expands (fresh
+ * data on the next page render).
+ */
+function ProductRecipeDetails({ productId }: { productId: string }) {
+  const [rows, setRows] = useState<RecipeDetailRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    if (rows || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/product-items?product_id=${productId}`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.error ?? `Gagal memuat isi paket (HTTP ${res.status})`);
+      } else {
+        const body = await res.json();
+        setRows(body.items ?? []);
+      }
+    } catch {
+      setError("Gagal memuat isi paket");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <details
+      className="mt-3 border-t border-gray-100 pt-3"
+      onToggle={(e) => {
+        if ((e.target as HTMLDetailsElement).open) load();
+      }}
+    >
+      <summary className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-900">
+        Isi Paket{rows ? ` (${rows.length} item)` : ""}
+      </summary>
+      <div className="mt-3">
+        {loading && (
+          <div className="space-y-2" aria-hidden="true">
+            <Skeleton className="h-3 w-4/5" />
+            <Skeleton className="h-3 w-3/5" />
+          </div>
+        )}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {rows && rows.length === 0 && (
+          <p className="text-xs text-gray-400">Belum ada item dalam paket.</p>
+        )}
+        {rows && rows.length > 0 && (
+          <ul className="space-y-1.5">
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="min-w-0 truncate text-gray-600">
+                  <span className="font-medium tabular-nums text-gray-900">
+                    {r.quantity}&times;
+                  </span>{" "}
+                  {recipeTitle(r)}
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  <span
+                    className={
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-medium " +
+                      (r.is_included
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500")
+                    }
+                  >
+                    {r.is_included ? "Termasuk" : "Add-on"}
+                  </span>
+                  <span
+                    className={
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-medium " +
+                      (r.is_show_public
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-gray-100 text-gray-500")
+                    }
+                  >
+                    {r.is_show_public ? "Tampil" : "Sembunyi"}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
+  );
+}
 
 type Props = {
   items: ProductRow[];
@@ -84,6 +203,8 @@ export default function ProductCardList({
                 </p>
               )}
             </div>
+
+            <ProductRecipeDetails productId={p.id} />
 
             {/* mt-auto pins actions to the bottom so grid rows stretch
                 to equal heights even when the vendor strip is absent. */}

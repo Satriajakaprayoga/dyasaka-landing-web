@@ -56,6 +56,7 @@ function variantTitle(
 function AddBookingItemForm({
   bookingId,
   catalog,
+  includedVariantIds,
   busy,
   error,
   onSubmit,
@@ -63,6 +64,8 @@ function AddBookingItemForm({
 }: {
   bookingId: string;
   catalog: BookingCatalogItem[];
+  /** Variants that are part of the booking's product package — they default to Rp 0. */
+  includedVariantIds: Set<string>;
   busy: boolean;
   error: string | null;
   onSubmit: (payload: {
@@ -89,7 +92,16 @@ function AddBookingItemForm({
   function selectVariant(id: string) {
     setVariantId(id);
     const found = variantById.get(id);
-    setPrice(found ? String(found.variant.current_price) : "");
+    // Included-in-package variants default to Rp 0 — their cost is
+    // already inside the package price. Everything else defaults to
+    // the variant's current price. Both stay editable.
+    setPrice(
+      found
+        ? includedVariantIds.has(id)
+          ? "0"
+          : String(found.variant.current_price)
+        : "",
+    );
   }
 
   const groups = new Map<string, { id: string; label: string }[]>();
@@ -164,6 +176,11 @@ function AddBookingItemForm({
             onChange={(e) => setPrice(e.target.value)}
             className={inputClass}
           />
+          {includedVariantIds.has(variantId) && (
+            <p className="mt-1 text-xs text-gray-400">
+              Termasuk paket — default gratis, bisa diubah.
+            </p>
+          )}
         </div>
       </div>
 
@@ -197,6 +214,8 @@ type Props = {
   catalog: BookingCatalogItem[];
   /** Confirmed same-date demand per variant (excluding this booking). */
   demand: Record<string, number>;
+  /** Variants of this booking's product recipe flagged is_included. */
+  includedVariantIds: Set<string>;
 };
 
 export default function BookingItemsPanel({
@@ -204,6 +223,7 @@ export default function BookingItemsPanel({
   items,
   catalog,
   demand,
+  includedVariantIds,
 }: Props) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -366,6 +386,7 @@ export default function BookingItemsPanel({
           <AddBookingItemForm
             bookingId={bookingId}
             catalog={catalog}
+            includedVariantIds={includedVariantIds}
             busy={busy}
             error={formError}
             onSubmit={handleAdd}

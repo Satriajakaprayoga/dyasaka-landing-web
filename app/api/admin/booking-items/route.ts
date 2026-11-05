@@ -66,12 +66,34 @@ export async function POST(req: NextRequest) {
 
   const isRentable = v.items?.type === 'rentable';
 
+  // Server-side truth for the include snapshot: the variant belongs to
+  // the booking's product recipe (is_included=true) or it's an add-on
+  // (false). The client's price input merely defaults to 0 for
+  // included variants — the admin may still override it.
+  const { data: bookingRow } = await supabase
+    .from('bookings')
+    .select('product_id')
+    .eq('id', booking_id)
+    .maybeSingle();
+
+  let isIncluded = false;
+  if (bookingRow?.product_id) {
+    const { data: recipeRow } = await supabase
+      .from('product_items')
+      .select('is_included')
+      .eq('product_id', bookingRow.product_id)
+      .eq('item_variant_id', item_variant_id)
+      .maybeSingle();
+    isIncluded = recipeRow?.is_included ?? false;
+  }
+
   const { data: inserted, error } = await supabase
     .from('booking_items')
     .insert({
       booking_id,
       item_variant_id,
       quantity: qty,
+      is_included: isIncluded,
       unit_price:
         unit_price != null && unit_price !== '' ? Number(unit_price) : v.current_price,
       rental_status: isRentable ? 'reserved' : null,

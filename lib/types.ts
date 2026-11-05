@@ -122,6 +122,11 @@ export type ProductItem = {
   product_id: string;
   item_variant_id: string;
   quantity: number;
+  // Part of the packet — booking seeding prices it at Rp 0 and the
+  // snapshot on booking_items keeps invoices from repricing it.
+  is_included: boolean;
+  // Renders on the public product page's "Paket Termasuk" list.
+  is_show_public: boolean;
 };
 
 export type RentalStatus = 'reserved' | 'checked_out' | 'returned';
@@ -132,6 +137,11 @@ export type BookingItem = {
   item_variant_id: string;
   quantity: number;
   unit_price: number;
+  // Snapshot of product_items.is_included at booking time: true means
+  // the line is part of the package, so the final-invoice prefill
+  // keeps the booking's unit_price (Rp 0) instead of repricing at the
+  // live catalog price. False for pre-flag rows and add-on lines.
+  is_included: boolean;
   // Frozen at creation from item_variants.cost_price; consumables
   // only — rentables carry no per-event material cost.
   unit_cost: number | null;

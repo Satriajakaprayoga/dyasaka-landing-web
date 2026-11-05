@@ -65,8 +65,11 @@ const getProductData = cache(async (id: string) => {
       .order('sort_order', { ascending: true }),
     supabase
       .from('product_items')
+      // Only rows the admin flagged for public display; the include
+      // flag is booking-pricing only and stays admin-facing.
       .select('id, quantity, item_variants(color, size, items(name))')
-      .eq('product_id', id),
+      .eq('product_id', id)
+      .eq('is_show_public', true),
   ]);
 
   const product = (productRes.data ?? null) as unknown as ProductWithCategory | null;

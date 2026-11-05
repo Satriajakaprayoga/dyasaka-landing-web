@@ -130,8 +130,8 @@ export async function GET(req: NextRequest) {
  *
  * `product_id` is optional: omit it (or null) for a custom booking
  * assembled per-item on the detail page. When a product is given, its
- * recipe is snapshotted into `booking_items` at the current variant
- * prices.
+ * recipe is snapshotted into `booking_items` — included rows at
+ * Rp 0 (part of the package), the rest at the current variant price.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase();
@@ -182,12 +182,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Seed booking_items from the product recipe — unit_price is a frozen
-  // snapshot of the variant's current price; rentables start as
-  // 'reserved'. Custom bookings (no product) start empty.
+  // snapshot: Rp 0 for rows flagged is_included (their cost lives
+  // inside the package price), the variant's current price otherwise;
+  // rentables start as 'reserved'. The include flag is snapshotted so
+  // the invoice prefill keeps the 0 later. Custom bookings (no
+  // product) start empty.
   if (data.product_id) {
     const { data: recipe, error: recipeError } = await supabase
       .from('product_items')
-      .select('item_variant_id, quantity, item_variants(current_price, items(type))')
+      .select('item_variant_id, quantity, is_included, item_variants(current_price, items(type))')
       .eq('product_id', data.product_id);
 
     if (recipeError) {
@@ -199,6 +202,7 @@ export async function POST(req: NextRequest) {
     const rows = (recipe ?? []) as unknown as {
       item_variant_id: string;
       quantity: number;
+      is_included: boolean;
       item_variants: {
         current_price: number;
         items: { type: string } | null;
@@ -211,7 +215,10 @@ export async function POST(req: NextRequest) {
           booking_id: data.id,
           item_variant_id: r.item_variant_id,
           quantity: r.quantity,
-          unit_price: r.item_variants?.current_price ?? 0,
+          is_included: r.is_included,
+          unit_price: r.is_included
+            ? 0
+            : (r.item_variants?.current_price ?? 0),
           rental_status:
             r.item_variants?.items?.type === 'rentable' ? 'reserved' : null,
         })),

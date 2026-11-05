@@ -25,6 +25,8 @@ export type RecipeRow = {
   id: string;
   item_variant_id: string;
   quantity: number;
+  is_included: boolean;
+  is_show_public: boolean;
   item_variants: RecipeVariant | null;
 };
 
@@ -60,11 +62,18 @@ function AddRecipeForm({
   catalog: RecipeCatalogItem[];
   busy: boolean;
   error: string | null;
-  onSubmit: (payload: { item_variant_id: string; quantity: number }) => void;
+  onSubmit: (payload: {
+    item_variant_id: string;
+    quantity: number;
+    is_included: boolean;
+    is_show_public: boolean;
+  }) => void;
   onCancel: () => void;
 }) {
   const [variantId, setVariantId] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [isIncluded, setIsIncluded] = useState(true);
+  const [isShowPublic, setIsShowPublic] = useState(true);
 
   // Group variants by item_category for the optgroup picker.
   const groups = new Map<string, { id: string; label: string }[]>();
@@ -84,7 +93,12 @@ function AddRecipeForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!variantId) return;
-        onSubmit({ item_variant_id: variantId, quantity: Number(quantity) });
+        onSubmit({
+          item_variant_id: variantId,
+          quantity: Number(quantity),
+          is_included: isIncluded,
+          is_show_public: isShowPublic,
+        });
       }}
       className="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
     >
@@ -122,6 +136,30 @@ function AddRecipeForm({
             className={inputClass}
           />
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-6">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={isIncluded}
+            onChange={(e) => setIsIncluded(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          Termasuk dalam paket
+          <span className="text-xs text-gray-400">
+            (harga booking otomatis Rp 0)
+          </span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={isShowPublic}
+            onChange={(e) => setIsShowPublic(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          Tampil di halaman produk
+        </label>
       </div>
 
       {error && (
@@ -176,6 +214,8 @@ export default function RecipePanel({
   async function handleAdd(payload: {
     item_variant_id: string;
     quantity: number;
+    is_included: boolean;
+    is_show_public: boolean;
   }) {
     setBusy(true);
     setFormError(null);
@@ -232,6 +272,29 @@ export default function RecipePanel({
   // product_items has no children — plain confirm, no impact query.
   function handleDeleteClick(row: RecipeRow) {
     setConfirmRow(row);
+  }
+
+  async function handleToggle(
+    row: RecipeRow,
+    key: "is_included" | "is_show_public",
+  ) {
+    setBusy(true);
+    setRowError(null);
+
+    const res = await fetch("/api/admin/product-items", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, [key]: !row[key] }),
+    });
+    setBusy(false);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setRowError(body.error ?? "Gagal menyimpan");
+      return;
+    }
+
+    router.refresh();
   }
 
   async function performDelete() {
@@ -329,6 +392,36 @@ export default function RecipePanel({
                       Harga ref: {formatRupiah(price)}
                       {isRentable ? " · Sewa" : " · Habis Pakai"}
                     </p>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleToggle(row, "is_included")}
+                        title="Termasuk dalam paket — harga booking otomatis Rp 0"
+                        className={
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-50 " +
+                          (row.is_included
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200")
+                        }
+                      >
+                        {row.is_included ? "Termasuk" : "Add-on"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleToggle(row, "is_show_public")}
+                        title="Tampil di halaman produk publik"
+                        className={
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-50 " +
+                          (row.is_show_public
+                            ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200")
+                        }
+                      >
+                        {row.is_show_public ? "Tampil" : "Sembunyi"}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <label className="flex items-center gap-2 text-sm text-gray-500">

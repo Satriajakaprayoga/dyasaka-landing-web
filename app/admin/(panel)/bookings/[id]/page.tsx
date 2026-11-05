@@ -171,6 +171,7 @@ export default async function BookingDetailPage(props: {
           eventDate={b.event_date}
           dpReceivedAt={b.dp_received_at}
           transportFee={b.transport_fee}
+          productId={b.product_id ?? null}
           productVendorPrice={b.products?.vendor_price ?? null}
           customerName={b.customer_name}
         />
@@ -184,6 +185,7 @@ async function BookingPanelsSection({
   eventDate,
   dpReceivedAt,
   transportFee,
+  productId,
   productVendorPrice,
   customerName,
 }: {
@@ -191,6 +193,7 @@ async function BookingPanelsSection({
   eventDate: string;
   dpReceivedAt: string | null;
   transportFee: number | null;
+  productId: string | null;
   productVendorPrice: number | null;
   customerName: string;
 }) {
@@ -280,6 +283,20 @@ async function BookingPanelsSection({
     }
   }
 
+  // Package membership: variants of the booking's product recipe that
+  // are flagged is_included default to Rp 0 in the add-item form.
+  const includedVariantIds = new Set<string>();
+  if (productId) {
+    const { data: includedRows } = await supabase
+      .from("product_items")
+      .select("item_variant_id")
+      .eq("product_id", productId)
+      .eq("is_included", true);
+    for (const row of includedRows ?? []) {
+      includedVariantIds.add(row.item_variant_id);
+    }
+  }
+
   // Actual helper pay, read from the ledger — never typed by hand.
   const paidByAssignment: Record<string, number> = {};
   let helpersActual = 0;
@@ -364,6 +381,7 @@ async function BookingPanelsSection({
         items={items}
         catalog={catalog}
         demand={demand}
+        includedVariantIds={includedVariantIds}
       />
       <ChecklistPanel
         bookingId={bookingId}

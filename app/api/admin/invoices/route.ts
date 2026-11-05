@@ -190,14 +190,15 @@ export async function POST(req: NextRequest) {
       },
     ];
   } else {
-    // Final invoice: prefilled from the booking's item snapshot, priced
-    // at the CURRENT catalog price (falling back to the booking's
-    // frozen price when the variant is gone). Copies either way —
-    // later catalog changes never touch an existing invoice.
+    // Final invoice: prefilled from the booking's item snapshot. Add-on
+    // lines reprice at the CURRENT catalog price (falling back to the
+    // booking's frozen price when the variant is gone); included lines
+    // (part of the package) keep the booking's price — usually Rp 0 —
+    // so a free component can never reappear as a chargeable line.
     const { data: bookingItems } = await supabase
       .from('booking_items')
       .select(
-        'quantity, unit_price, item_variants(color, size, current_price, items(name))',
+        'quantity, unit_price, is_included, item_variants(color, size, current_price, items(name))',
       )
       .eq('booking_id', booking_id)
       .order('id');
@@ -205,6 +206,7 @@ export async function POST(req: NextRequest) {
     const rows = (bookingItems ?? []) as unknown as {
       quantity: number;
       unit_price: number;
+      is_included: boolean;
       item_variants: {
         color: string | null;
         size: string | null;
@@ -224,13 +226,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2) Item lines at live catalog prices.
+    // 2) Item lines — add-ons at live catalog prices, included lines
+    //    at the frozen booking price.
     rows.forEach((r, i) => {
       const livePrice = r.item_variants?.current_price;
+      const unitPrice = r.is_included
+        ? Number(r.unit_price)
+        : livePrice != null
+          ? Number(livePrice)
+          : Number(r.unit_price);
       lines.push({
         description: describeVariant(r.item_variants),
         quantity: r.quantity,
-        unit_price: livePrice != null ? Number(livePrice) : Number(r.unit_price),
+        unit_price: unitPrice,
         source_type: 'item',
         sort_order: (i + 1) * 10,
       });
