@@ -27,7 +27,7 @@ import {
 import { BookingPanelsSkeleton } from "@/components/admin/skeletons";
 
 type BookingWithProduct = Booking & {
-  products: Pick<Product, "name" | "vendor_price"> | null;
+  products: Pick<Product, "name" | "price" | "vendor_price"> | null;
 };
 
 export default async function BookingDetailPage(props: {
@@ -38,7 +38,7 @@ export default async function BookingDetailPage(props: {
 
   const { data: booking } = await supabase
     .from("bookings")
-    .select("*, products(name, vendor_price)")
+    .select("*, products(name, price, vendor_price)")
     .eq("id", params.id)
     .single();
 
@@ -172,6 +172,7 @@ export default async function BookingDetailPage(props: {
           dpReceivedAt={b.dp_received_at}
           transportFee={b.transport_fee}
           productId={b.product_id ?? null}
+          productPrice={b.products?.price ?? null}
           productVendorPrice={b.products?.vendor_price ?? null}
           customerName={b.customer_name}
         />
@@ -186,6 +187,7 @@ async function BookingPanelsSection({
   dpReceivedAt,
   transportFee,
   productId,
+  productPrice,
   productVendorPrice,
   customerName,
 }: {
@@ -194,6 +196,7 @@ async function BookingPanelsSection({
   dpReceivedAt: string | null;
   transportFee: number | null;
   productId: string | null;
+  productPrice: number | null;
   productVendorPrice: number | null;
   customerName: string;
 }) {
@@ -343,8 +346,14 @@ async function BookingPanelsSection({
   // ---------- Margin per event (doc §14) ----------
   // Goods-purchase payments tied to a purchase order are cashflow-only:
   // material cost already enters here through the cost snapshot.
+  // Booking total mirrors the final-invoice builder: package price +
+  // add-on lines (is_included = false) + transport. Included recipe
+  // lines ride inside the package price, so they contribute nothing.
   const bookingTotal =
-    items.reduce((s, it) => s + Number(it.unit_price) * it.quantity, 0) +
+    (productPrice ?? 0) +
+    items
+      .filter((it) => !it.is_included)
+      .reduce((s, it) => s + Number(it.unit_price) * it.quantity, 0) +
     (transportFee ?? 0);
   const expectedRevenue =
     finalInvoiceRes.data?.total != null
