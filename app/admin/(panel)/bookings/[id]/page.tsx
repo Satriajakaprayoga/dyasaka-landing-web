@@ -381,7 +381,12 @@ async function BookingPanelsSection({
   const otherActual = txRows
     .filter((t) => t.direction === "out" && t.purchase_order_id == null && !t.booking_staff_id)
     .reduce((s, t) => s + Number(t.amount), 0);
-  const actualCosts = helpersActual + otherActual;
+  // Actual margin subtracts every known cost of the event: cash paid
+  // out (helpers, misc ledger rows) plus the frozen material cost and
+  // vendor price — materials/vendor have no ledger actuals, the
+  // snapshot IS their cost.
+  const actualCosts =
+    helpersActual + otherActual + materialsExpected + vendorExpected;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -483,14 +488,20 @@ function BookingMarginPanel({
             <td className="px-4 py-2 text-right">{money(actualRevenue)}</td>
           </tr>
           <tr>
-            <td className="px-4 py-2 text-gray-700">Bahan (consumable)</td>
+            <td className="px-4 py-2 text-gray-700">
+              Bahan (consumable)
+              <span className="block text-xs text-gray-400">estimasi biaya</span>
+            </td>
             <td className="px-4 py-2 text-right">{money(materialsExpected)}</td>
-            <td className="px-4 py-2 text-right text-gray-300">—</td>
+            <td className="px-4 py-2 text-right">{money(materialsExpected)}</td>
           </tr>
           <tr>
-            <td className="px-4 py-2 text-gray-700">Vendor</td>
+            <td className="px-4 py-2 text-gray-700">
+              Vendor
+              <span className="block text-xs text-gray-400">estimasi biaya</span>
+            </td>
             <td className="px-4 py-2 text-right">{money(vendorExpected)}</td>
-            <td className="px-4 py-2 text-right text-gray-300">—</td>
+            <td className="px-4 py-2 text-right">{money(vendorExpected)}</td>
           </tr>
           <tr>
             <td className="px-4 py-2 text-gray-700">Helper / staff</td>
@@ -530,8 +541,9 @@ function BookingMarginPanel({
       </table>
       <p className="border-t border-gray-100 px-4 py-3 text-xs text-gray-400">
         Pembelian barang via PO hanya dihitung di arus kas, tidak di margin —
-        biaya bahan sudah masuk lewat harga pokok. Gaji tetap tidak dihitung
-        kecuali ditautkan ke booking ini.
+        biaya bahan sudah masuk lewat harga pokok. Kolom aktual juga
+        mengurangi bahan &amp; vendor pada nilai yang diketahui (snapshot).
+        Gaji tetap tidak dihitung kecuali ditautkan ke booking ini.
       </p>
     </Card>
   );

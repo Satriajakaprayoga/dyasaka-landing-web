@@ -449,64 +449,127 @@ export default function OrderDetailPage() {
         <div className="border-b border-gray-100 px-4 py-3">
           <p className="text-sm font-semibold text-gray-900">Baris Pesanan</p>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
-              <th className="px-4 py-2 font-medium">Varian</th>
-              <th className="px-4 py-2 text-right font-medium">Dipesan</th>
-              <th className="px-4 py-2 text-right font-medium">Diterima</th>
-              <th className="px-4 py-2 text-right font-medium">Harga Pokok</th>
-              <th className="px-4 py-2 text-right font-medium">Subtotal</th>
-              <th className="px-4 py-2" aria-label="aksi" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {items.map((it) => {
-              const lineRemaining = it.quantity_ordered - it.quantity_received;
-              return (
-                <tr key={it.id}>
-                  <td className="px-4 py-2.5 text-gray-900">
-                    {variantTitle(it.item_variants)}
+        {/* Mobile: stacked rows — the 6-column table doesn't fit narrow screens. */}
+        <ul className="divide-y divide-gray-50 md:hidden">
+          {items.map((it) => {
+            const lineRemaining = it.quantity_ordered - it.quantity_received;
+            return (
+              <li key={it.id} className="space-y-2 px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">
+                      {variantTitle(it.item_variants)}
+                    </p>
                     {it.item_variants?.items?.type === "rentable" && (
-                      <span className="block text-xs text-gray-400">rentable</span>
+                      <p className="text-xs text-gray-400">rentable</p>
                     )}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
-                    {it.quantity_ordered}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
-                    {it.quantity_received}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
-                    {formatRupiah(Number(it.unit_cost))}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                    {formatRupiah(it.quantity_ordered * Number(it.unit_cost))}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {isActive && lineRemaining > 0 && (
-                      receivingLine?.id === it.id ? (
-                        <span className="text-xs text-gray-400">menerima…</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReceivingLine(it);
-                            setReceiveQty(String(lineRemaining));
-                          }}
-                          disabled={busy}
-                          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-                        >
-                          Terima
-                        </button>
-                      )
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                  {isActive && lineRemaining > 0 && (
+                    receivingLine?.id === it.id ? (
+                      <span className="shrink-0 text-xs text-gray-400">menerima…</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceivingLine(it);
+                          setReceiveQty(String(lineRemaining));
+                        }}
+                        disabled={busy}
+                        className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                      >
+                        Terima
+                      </button>
+                    )
+                  )}
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-xs text-gray-400">Dipesan</dt>
+                    <dd className="tabular-nums text-gray-700">{it.quantity_ordered}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-xs text-gray-400">Diterima</dt>
+                    <dd className="tabular-nums text-gray-700">{it.quantity_received}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-xs text-gray-400">Harga Pokok</dt>
+                    <dd className="tabular-nums text-gray-700">
+                      {formatRupiah(Number(it.unit_cost))}
+                    </dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="text-xs text-gray-400">Subtotal</dt>
+                    <dd className="tabular-nums font-medium text-gray-900">
+                      {formatRupiah(it.quantity_ordered * Number(it.unit_cost))}
+                    </dd>
+                  </div>
+                </dl>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Desktop: full table. */}
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
+                <th className="px-4 py-2 font-medium">Varian</th>
+                <th className="px-4 py-2 text-right font-medium">Dipesan</th>
+                <th className="px-4 py-2 text-right font-medium">Diterima</th>
+                <th className="px-4 py-2 text-right font-medium">Harga Pokok</th>
+                <th className="px-4 py-2 text-right font-medium">Subtotal</th>
+                <th className="px-4 py-2" aria-label="aksi" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {items.map((it) => {
+                const lineRemaining = it.quantity_ordered - it.quantity_received;
+                return (
+                  <tr key={it.id}>
+                    <td className="px-4 py-2.5 text-gray-900">
+                      {variantTitle(it.item_variants)}
+                      {it.item_variants?.items?.type === "rentable" && (
+                        <span className="block text-xs text-gray-400">rentable</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
+                      {it.quantity_ordered}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
+                      {it.quantity_received}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
+                      {formatRupiah(Number(it.unit_cost))}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
+                      {formatRupiah(it.quantity_ordered * Number(it.unit_cost))}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {isActive && lineRemaining > 0 && (
+                        receivingLine?.id === it.id ? (
+                          <span className="text-xs text-gray-400">menerima…</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReceivingLine(it);
+                              setReceiveQty(String(lineRemaining));
+                            }}
+                            disabled={busy}
+                            className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            Terima
+                          </button>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {receivingLine && (
           <form
