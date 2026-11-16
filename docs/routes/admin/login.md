@@ -22,4 +22,4 @@ Email/password sign-in for the administrator. Standalone layout — no sidebar.
 
 ## Navigation
 
-- Redirects to `/admin` after login. `middleware.ts` sends unauthenticated `/admin/*` visitors here.
+- Redirects to `/admin` after login. `proxy.ts` sends unauthenticated `/admin/*` visitors here.

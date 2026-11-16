@@ -26,8 +26,16 @@ the existing schema (`categories`, `products`, `product_images`, `bookings`,
 - Cost data on items (plus the vendor cost already on products), so margin
   per event can be computed
 
-Use this as the source of truth for schema generation. Table names, field names,
+Use this as the design reference for schema changes. Table names, field names,
 and relationships below should be followed exactly unless noted otherwise.
+
+> **Status (Nov 2026):** everything in sections 1–9 and 11–16 is applied, via
+> `supabase/migrations/` (26 tables). **Section 10 (traffic-source analytics)
+> is not built** — `bookings.source` / `bookings.utm_campaign` and
+> `page_visits` do not exist. `supabase/schema.sql` is a historical snapshot
+> of the original five-table schema and is *not* the current schema; always
+> read the migrations for the applied state. Route-level behavior is
+> documented in `docs/routes/`.
 
 ---
 
@@ -63,6 +71,8 @@ not a single physical thing.
 - `description`
 - `price`
 - `is_active`
+- `vendor_id` — nullable FK → `vendors` (section 5, added 20261025100000)
+- `vendor_price` — nullable internal cost, `>= 0`
 - `created_at`, `updated_at`
 
 ### `bookings`
@@ -443,9 +453,11 @@ linked to the invoice (see "Link to the money ledger" below).
 - `invoice_number` — unique, human-readable
 - `access_token` — unique, long and unguessable; this is what the customer's
   link contains, never the booking id or invoice id
-- `status` — one of: `draft`, `issued`, `paid`, `void`. Draft is editable and
-  never visible to customers; issued is frozen; `paid` follows from the
-  ledger payments (below); void is the correction path
+- `status` — one of: `draft`, `issued`, `partially_paid`, `paid`, `void`
+  (`partially_paid` added by `20261024090000_invoice_partially_paid.sql`).
+  Draft is editable and never visible to customers; issued is frozen;
+  `partially_paid` / `paid` follow from the ledger payments (below); void is
+  the correction path
 - `issue_date`
 - `due_date` — nullable
 - `subtotal`
@@ -536,6 +548,10 @@ that would mean letting a `paid` invoice step back to `issued`.
 ---
 
 ## 10. Traffic-source analytics
+
+> **Status: not built.** No migration adds `source` / `utm_campaign` to
+> `bookings`, no `page_visits` table exists, and the booking forms have no
+> source field. Keep this section as the design if the feature is picked up.
 
 The website can only learn where a visitor came from at the moment they
 arrive, so the source is captured on first landing, kept in the browser, and
@@ -876,7 +892,8 @@ Rules:
   never get a general select permission on `invoices` or `bookings`.
 - `company_profile` holds one row only.
 - `source` on bookings is recorded at booking creation and is never inferred
-  later; bookings made before the field existed stay empty.
+  later; bookings made before the field existed stay empty. (Section 10 is
+  not built yet, so the column does not exist in the applied schema.)
 - Procurement never edits stock directly. Receiving goods always goes through
   `stock_movements`.
 - Invoices: several per booking — `dp` and `final`, at most one non-void of

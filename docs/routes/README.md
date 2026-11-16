@@ -2,6 +2,20 @@
 
 One markdown file per route, mirroring the `app/` directory structure. Docs describe the final state of the codebase — update a route's doc when changing the route.
 
+## Documentation standard
+
+Every route doc uses the same skeleton:
+
+1. **Header table** — `URL` (pages only), `Access`, `Rendering` (`ƒ`/static + client components), `Source` (page/route file + the components it renders).
+2. **Purpose** — one short paragraph: what the route is for and where it sits in the flow.
+3. **Data** — the exact tables/columns, embeds, filters, RPCs and API calls, in the order the code performs them. Note `notFound()` paths and casts.
+4. **Behavior/UI** — one section per panel, form or action, naming the API endpoint and payload for each write, plus guards and empty/error states.
+5. **Navigation** — breadcrumbs, back links, and where the route is reached from.
+
+API docs instead use: header table (`Access`, `Source`), then one `## METHOD — verb` section per handler with body shape, validation → status codes, and the resulting response payload. Cross-link related routes (e.g. a page ↔ its API) rather than repeating shared rules; shared patterns live in this file.
+
+Keep claims verifiable against the code: file paths include the `(public)` / `(panel)` groups, the gate is `proxy.ts` (Next 16 middleware), and `supabase/migrations/` is the schema source of truth (`schema.sql` is a historical snapshot).
+
 ## Shared patterns
 
 - **Delete confirmation** (`components/admin/ConfirmModal.tsx`) — every admin delete opens a modal instead of `window.confirm`. Rows with RESTRICT-referencing children (categories, items, variants) first run count queries (`head: true`) against the referencing tables; blockers disable the confirm button and say what still uses the row ("masih dipakai N booking"), while CASCADE children are listed as "akan ikut terhapus" (N foto, N baris checklist, …). Product deletion is not blocked: its active bookings are cancelled by the `trg_products_cancel_bookings` trigger and the modal says so. Where bookings or products are part of the impact, the modal also renders them as **inspection links** — `ImpactBookingList` (customer + date + status, links to the booking detail; active ones marked "akan dibatalkan") and `ImpactProductList` (links to the recipe editor) — and the bookings-table modal links to the booking itself, so the admin can check every reference before confirming. Child-row deletes (recipe, booking items, checklist) use the same modal with a plain confirm or a small cascade count. The APIs also map PostgREST `23503` to a friendly Indonesian 409 as a race-condition backstop.
@@ -35,6 +49,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/admin/bookings/new` | [admin/bookings-new.md](admin/bookings-new.md) | Record a new booking (product or custom) |
 | `/admin/bookings/[id]` | [admin/bookings-detail.md](admin/bookings-detail.md) | Booking detail: item snapshot, 3-phase checklist, staff + margin, DP + project status + invoice slots |
 | `/admin/bookings/[id]/edit` | [admin/bookings-edit.md](admin/bookings-edit.md) | Edit booking details/status |
+| `/admin/bookings/[id]/invoice/[invoiceId]` | [admin/bookings-invoice.md](admin/bookings-invoice.md) | Invoice editor: draft lines, issue, record payment, public link, void/delete |
 | `/admin/items` | [admin/items-list.md](admin/items-list.md) | Inventory list, search/filters, pagination, low-stock badge |
 | `/admin/items/new` | [admin/items-new.md](admin/items-new.md) | Create item (consumable/rentable) with category autocomplete |
 | `/admin/items/[id]` | [admin/items-detail.md](admin/items-detail.md) | Variant management, stock movements, price history |
@@ -69,6 +84,7 @@ Desktop uses the dark sidebar (`AdminSidebar`); phones/tablets get a fixed botto
 | `/api/admin/bank-accounts` | [api/admin-bank-accounts.md](api/admin-bank-accounts.md) | POST, PATCH (allow-list), DELETE |
 | `/api/admin/suppliers` | [api/admin-suppliers.md](api/admin-suppliers.md) | POST, PATCH (allow-list), DELETE (409 while referenced) |
 | `/api/admin/booking-staff` | [api/admin-booking-staff.md](api/admin-booking-staff.md) | POST (assign, planned), PATCH (allow-list incl. status), DELETE |
+| `/api/admin/staff` | [api/admin-staff.md](api/admin-staff.md) | GET (paginated list, `search`), POST, PATCH (allow-list incl. is_active), DELETE (409 while assigned) |
 | `/api/admin/transactions` | [api/admin-transactions.md](api/admin-transactions.md) | POST (append), PATCH (`action "reverse"` only — append-only ledger, no GET/DELETE) |
 | `/api/admin/transaction-categories` | [api/admin-transaction-categories.md](api/admin-transaction-categories.md) | POST (direction fixed at creation), PATCH (name/active/sort — no DELETE) |
 | `/api/admin/plans` | [api/admin-plans.md](api/admin-plans.md) | POST (optional starter lines), PATCH (allow-list incl. status), DELETE (always allowed) |

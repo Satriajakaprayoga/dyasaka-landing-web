@@ -1,7 +1,7 @@
 # Feature Specification — Dyasaka Decoration (Balloon Party Planner)
 
 This document describes the features to build on top of the database structure
-defined in `database-structure.md`. Each feature maps directly to tables and
+defined in [`DATABASE_SRUCTURE.md`](DATABASE_SRUCTURE.md). Each feature maps directly to tables and
 fields in that document — refer to it for schema details. This file focuses on
 behavior, flow, and what each screen/feature needs to do.
 
@@ -13,8 +13,12 @@ behavior, flow, and what each screen/feature needs to do.
 > Paket"), booking item snapshots with `transport_fee` + custom bookings,
 > DP-received → auto checklist → 3-phase workflow with manual project status,
 > and the dashboard operational views
-> (`supabase/migrations/20261020120000_booking_workflow.sql`). The spec is
-> kept as written; differences from reality are noted inline.
+> (`supabase/migrations/20261020120000_booking_workflow.sql`). Sections 9
+> (invoices), 11–13 (procurement, staff, ledger), 14 (margin), 15 (reports)
+> and 16 (purchase plans) are likewise implemented. **Section 10
+> (traffic-source analytics) is not built.** The spec is kept as written;
+> differences from reality are noted inline. For the applied schema see
+> `DATABASE_SRUCTURE.md`, and for screen-level behavior see `docs/routes/`.
 
 ---
 
@@ -32,7 +36,9 @@ been redesigned.
 - Public availability calendar — standalone page and embedded on product pages
 - ~~No customer-facing booking form; all bookings are entered by the admin
   after negotiation happens on WhatsApp~~ — **Changed:** a "Booking Sekarang"
-  modal on the product page now lets customers insert a booking themselves;
+  modal on the product page now lets customers insert a booking themselves.
+  Anonymous inserts are throttled by the database (max 3 pending bookings
+  per phone per 24h, plus a duplicate phone+date guard);
   it always lands as `pending`/unpaid and the admin still confirms it
   (WhatsApp remains where the sale is negotiated and finalized)
 
@@ -325,9 +331,10 @@ also needs rented chairs/tables and a location-dependent transport cost.
 - Choose which active bank account is shown on the invoice
 - Issuing the invoice assigns the invoice number, freezes all lines and
   totals, and copies the company name and chosen bank account into the invoice
-- Statuses: `draft` (editable, not visible to customers), `issued`, `paid`,
-  `void`. An issued invoice cannot be edited; to correct it, void it and create
-  a new one
+- Statuses: `draft` (editable, not visible to customers), `issued`,
+  `partially_paid` (derived when some ledger payments exist), `paid`, `void`.
+  An issued invoice cannot be edited; to correct it, void it and create a new
+  one
 - The admin gets the invoice link to send to the customer over WhatsApp
 - A booking can have several invoices: first a **deposit invoice** with one
   line (the deposit amount, typed by the admin, optionally prefilled from a

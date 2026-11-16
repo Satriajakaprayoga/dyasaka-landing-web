@@ -14,8 +14,8 @@ audiences from one codebase:
 
 | Audience | Surface | Purpose |
 |---|---|---|
-| Customers | `/`, `/catalog`, `/product/[id]`, `/availability` | Browse packages, check date availability, book or initiate contact |
-| Owner (single admin) | `/admin/*` + `/api/admin/*` | Manage catalog and bookings, confirm incoming requests |
+| Customers | `/`, `/catalog`, `/product/[id]`, `/availability`, `/invoice/[token]` | Browse packages, check date availability, book or initiate contact, open a private invoice link |
+| Owner (single admin) | `/admin/*` + `/api/admin/*` | Manage catalog, inventory, bookings, invoices, cash, staff and procurement |
 
 The defining business insight of this project: **the sale is finalized on
 WhatsApp, not on the website.** Customers can now create a booking themselves
@@ -31,13 +31,15 @@ target market.
 
 ## 2. Tech stack
 
-- **Next.js 14.2** (App Router) + **TypeScript** + **React 18**
+- **Next.js 16.4** (App Router) + **TypeScript** + **React 19**
 - **Tailwind CSS 3** for styling (no component library)
 - **Supabase** as the entire backend:
   - **Postgres** — data + triggers + Row Level Security (RLS)
   - **Auth** — email/password, single admin, no public sign-up UI
   - **Storage** — `product-images` bucket (public read)
-- `@supabase/ssr` for cookie-based auth in server contexts and middleware
+- `@supabase/ssr` for cookie-based auth in server contexts (route gating lives in `proxy.ts`, Next 16's replacement for `middleware.ts`)
+
+Next 16 details that matter here: `cookies()` and route `params` are async, and middleware is named `proxy.ts` (exporting `proxy`, not `middleware`). There are no server actions — writes go through `/api/admin/*` or, for public bookings, straight to Supabase under RLS.
 
 There is no custom server, no separate API service, no other database. Supabase
 *is* the backend; Next.js is both the UI and a thin authorized proxy for admin writes.
@@ -48,10 +50,10 @@ There is no custom server, no separate API service, no other database. Supabase
 
 ```
                        ┌──────────────────────────────────────┐
-                       │              Next.js 14              │
+                       │              Next.js 16              │
   Customer ───────────►│  Public pages (RSC)                  │
    (anon)              │   /  /catalog  /product/[id]         │
-                       │   /availability                      │
+                       │   /availability  /invoice/[token]    │
                        │        │                             │
                        │        │ browser client (anon JWT)   │
                        │        ▼                             │
@@ -61,7 +63,7 @@ There is no custom server, no separate API service, no other database. Supabase
                        └─────────────────────────────────┼────┘
                                                          │
   Admin ───────────────►┌────────────────────────────────┼────┐
-   (authenticated)      │ middleware.ts                  │    │
+   (authenticated)      │ proxy.ts                       │    │
                         │  gates /admin/* via cookies ───┤    │
                         │                                │    │
                         │  Admin pages (mix RSC + CSR)   │    │
@@ -72,10 +74,11 @@ There is no custom server, no separate API service, no other database. Supabase
                         ┌────────────────────────────────▼────┐
                         │              Supabase               │
                         │  Postgres (RLS on every table)      │
-                        │   ├─ categories, products,          │
-                        │   │  product_images                 │
-                        │   ├─ date_capacity  ◄── trigger ──  │
-                        │   └─ bookings (admin w + pub ins)   │
+                        │   ├─ categories, products, images   │
+                        │   ├─ bookings / booking_items       │
+                        │   ├─ invoices, transactions, staff  │
+                        │   ├─ … procurement & plans          │
+                        │   └─ date_capacity ◄── trigger      │
                         │  Auth (email/password)              │
                         │  Storage (product-images, public r) │
                         └─────────────────────────────────────┘
@@ -102,13 +105,33 @@ boundary.
 
 ## 4. Domain model (database interpretation)
 
-Five tables (`supabase/schema.sql`, mirrored in `supabase/migrations/`):
+The schema now spans 26 tables. `docs/DATABASE_SRUCTURE.md` is the full
+reference; this section covers the original selling core and the trigger
+machinery, which the rest of the model still builds on:
 
 ```
 categories 1───* products 1───* product_images
-                    │
-                    └──────* bookings ──(trigger)──► date_capacity
+                    │                 │
+                    │                 └──* product_items ──* items 1───* item_variants
+                    └──────* bookings ─┬─* booking_items ──► stock/rental state
+                                       ├─* checklist_items
+                                       ├─* invoices 1───* invoice_items
+                                       ├─* transactions (ledger, append-only)
+                                       ├──* booking_staff ──* staff
+                                       └─* vendors
+                    └──(trigger)──► date_capacity
+
+suppliers 1───* purchase_orders 1───* purchase_order_items
+purchase_plans 1───* purchase_plan_lines
+company_profile (single row)   company_bank_accounts
 ```
+
+**Which files are authoritative:** `supabase/migrations/` is the source of
+truth (20+ files, applied in filename order). `supabase/schema.sql` is a
+historical snapshot of the *original* five-table schema kept as a quick
+bootstrap for a fresh project; it is not regenerated and does not describe the
+current database. `docs/DATABASE_SRUCTURE.md` is the design reference (with
+status notes for the parts that are not built).
 
 ### Table-by-table reading
 
@@ -125,7 +148,7 @@ categories 1───* products 1───* product_images
 - **`product_images`** — ordered photo URLs (`sort_order`) pointing into
   Supabase Storage. `ON DELETE CASCADE` with products. The catalog "cover
   image" is simply the lowest `sort_order` image, picked client-side
-  (app/catalog/page.tsx:91).
+  (`app/(public)/catalog/page.tsx`).
 
 - **`date_capacity`** — the heart of the scheduling design. One row per
   calendar **date** (`event_date` is the primary key) with `max_capacity`
@@ -151,7 +174,8 @@ categories 1───* products 1───* product_images
 ### The capacity trigger (`recalc_date_capacity` / `bookings_after_change`)
 
 Rather than maintaining `booked_count` in application code, a Postgres trigger
-(schema.sql:109) fires AFTER insert/update/delete on `bookings` and
+(`bookings_after_change`, `supabase/migrations/20261007120000_public_booking_insert.sql`)
+fires AFTER insert/update/delete on `bookings` and
 **recomputes** the count from scratch:
 
 ```sql
@@ -165,7 +189,7 @@ Interpretation:
   `+1/-1` increment logic.
 - Only `confirmed` bookings consume capacity. `pending` and `cancelled` do not.
 - If a booking's `event_date` changes, **both** the old and new dates are
-  recalculated (schema.sql:101).
+  recalculated by the same function.
 - The function also lazily creates the `date_capacity` row for a date the first
   time it is touched — so rows only exist for dates that have booking history.
   Missing rows are interpreted by the app as "fully open"
@@ -242,19 +266,23 @@ The README describes the flow; here is *why* it is shaped this way.
 
 Defense is layered, and the deepest layer is the database:
 
-1. **Route gate** — `middleware.ts` matches `/admin/:path*`, resolves the user
+1. **Route gate** — `proxy.ts` matches `/admin/:path*`, resolves the user
    from cookies, and redirects anon users to `/admin/login` (and logged-in
    users away from the login page).
 
 2. **API-route check** — every handler in `app/api/admin/*` calls
    `supabase.auth.getUser()` and returns 401 before touching data. This matters
-   because API routes are *not* covered by the middleware matcher.
+   because API routes are *not* covered by the `proxy.ts` matcher.
 
 3. **RLS (the real boundary)** —
-   - anon: `SELECT` on categories, active products, images, `date_capacity`,
-     plus a tightly constrained `INSERT` on `bookings` (pending-only,
-     active product, future date — see §4). Nothing else.
-   - `authenticated`: full CRUD on everything, via `auth.role() = 'authenticated'`.
+   - anon: `SELECT` on categories, active products (explicit column grants),
+     images, `date_capacity`, `company_profile`, plus a tightly constrained
+     `INSERT` on `bookings` (pending-only, active product, future date — see
+     §4) and `EXECUTE` on `get_invoice_by_token` (SECURITY DEFINER). Nothing
+     else.
+   - `authenticated`: full CRUD on every table, via `auth.role() = 'authenticated'`.
+     Money, staff, supplier and procurement tables deliberately have **no**
+     anon policy.
    - Storage: policies on `storage.objects` for the `product-images` bucket —
      authenticated write, public read, bucket forced public
      (modernized by supabase/migrations/20261006120000_modernize_storage_policies.sql).
@@ -271,33 +299,37 @@ custom JWT claim in the policies.
 ## 7. Code organization
 
 ```
-app/                     Next.js App Router
-  page.tsx               Static hero homepage (links to catalog/availability)
-  layout.tsx             Shell: header nav, metadata, lang="id"
-  catalog/page.tsx       RSC; reads searchParams, queries products+categories
-  product/[id]/page.tsx  RSC; product + images; islands: ProductGallery,
-                         Lightbox (zoom), BookingModal (anon insert), calendar
-  availability/page.tsx  Thin wrapper around the calendar (7 months)
+app/
+  layout.tsx                 Root shell (metadata, lang="id", font, PWA register)
+  manifest.ts                PWA manifest;  icon.svg
+  (public)/                  Public site, shared header + SiteFooter
+    page.tsx                 Landing page (hero, featured, categories, gallery, FAQ…)
+    catalog/page.tsx         RSC; force-dynamic + unstable_cache("catalog-data")
+    product/[id]/page.tsx    RSC; on-demand static product + client gallery/booking modal
+    availability/page.tsx    Public calendar (7 months ahead)
+  invoice/[token]/page.tsx   Standalone public invoice (RPC by token, print-to-PDF)
+  offline/page.tsx           Offline fallback (service worker)
   admin/
-    login/               CSR; signInWithPassword → redirect /admin
-    page.tsx             RSC dashboard (product count, pending-booking count)
-    products/            RSC list + CSR "new"/"edit" forms (photo upload)
-    categories/          CSR list + CRUD (pagination)
-    bookings/            RSC list (inline status) + CSR "new"/"edit" forms
-  api/admin/             JSON CRUD endpoints for all admin tables (session-checked)
+    login/                   CSR; signInWithPassword → /admin
+    (panel)/                 Sidebar + bottom-nav shell (all admin screens)
+      page.tsx               Dashboard (stats + 4 operational views)
+      products|items|bookings|categories|vendors|suppliers|staff|
+      ledger|report|plans|orders|settings/…
+  api/admin/                 JSON CRUD endpoints per resource (session-checked)
 components/
-  AvailabilityCalendar   Shared client month grid, reads date_capacity;
-                         compact mode embeds on the product page
-  BalloonIcon            Shared SVG used by catalog/product empty states
+  landing/                   Public page sections
+  admin/                     Admin panels, forms, tables, shared UI hooks
+  AvailabilityCalendar       Client month grid reading date_capacity
 lib/
-  supabase.ts            Browser client (+ a leftover connection self-test)
-  supabase-server.ts     Cookie-bound server client
-  booking-helpers.ts     Capacity range fetch, availability predicate, wa.me builder
-  types.ts               TS types mirroring the DB tables
+  supabase.ts                Browser client
+  supabase-server.ts         Cookie-bound server client
+  booking-helpers.ts         Capacity range, availability, wa.me link builders
+  revalidate-public.ts       purge cached public pages after admin writes
+  types.ts                   TS types mirroring the DB tables
 supabase/
-  schema.sql             Canonical full schema (setup script)
-  migrations/            CLI-generated migrations (initial schema + storage RLS)
-middleware.ts            /admin/* auth gate
+  migrations/                Source of truth (applied in filename order)
+  schema.sql                 Historical snapshot of the original 5-table schema
+proxy.ts                     /admin/* auth gate (Next 16 middleware)
 ```
 
 Rendering strategy is pragmatic: **read paths are React Server Components**
@@ -328,8 +360,14 @@ knowing):
   recognizes the admin session, but note the pattern: the app has no
   service-role usage at all, by design.
 - **No tests, no lint config, no CI** — a single-developer business tool.
-- **Homepage is minimal** (hero + two links); featured categories remain
-  unbuilt.
+- **Documentation drift.** `docs/DATABASE_SRUCTURE.md` was written against
+  the first schema and still carries some design-time prose; it now marks
+  the unbuilt parts (traffic sources). The route docs under `docs/routes/`
+  are the most current per-screen reference. `supabase/schema.sql`
+  intentionally remains the old bootstrap snapshot — the migrations are the
+  applied schema.
+- **Homepage content is partly hardcoded** (testimonials, FAQ, how-to-order);
+  there is no settings table for it, so copy changes are code changes.
 
 ---
 

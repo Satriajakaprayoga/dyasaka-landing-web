@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **URL** | `/admin` |
-| **Access** | Admin (session required; `middleware.ts` guards `/admin/*`, RLS enforces writes) |
+| **Access** | Admin (session required; `proxy.ts` guards `/admin/*`, RLS enforces writes) |
 | **Rendering** | Dynamic Server Component (`ƒ`) |
 | **Source** | `app/admin/(panel)/page.tsx` |
 
