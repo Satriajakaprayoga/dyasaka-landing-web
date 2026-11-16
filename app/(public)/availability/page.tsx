@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 
-export const metadata = {
-  title: "Ketersediaan Tanggal | Balloon Party Planner",
+export const metadata: Metadata = {
+  title: { absolute: "Ketersediaan Tanggal — Dyasaka Decoration" },
+  description:
+    "Cek tanggal yang masih tersedia untuk dekorasi balon Dyasaka Decoration sebelum memesan.",
 };
 
 export default function AvailabilityPage() {

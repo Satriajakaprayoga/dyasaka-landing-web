@@ -11,7 +11,12 @@ export default function PageTransition({
 }) {
   const pathname = usePathname();
   return (
-    <div key={pathname} className="animate-page-in">
+    <div
+      key={pathname}
+      id="main-content"
+      tabIndex={-1}
+      className="animate-page-in"
+    >
       {children}
     </div>
   );

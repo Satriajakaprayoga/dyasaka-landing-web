@@ -132,14 +132,14 @@ function AddBookingItemForm({
     >
       <div className="grid gap-4 sm:grid-cols-[1fr_100px_140px]">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="varian" className="block text-sm font-medium text-gray-700 mb-1.5">
             Varian
           </label>
           <select
             value={variantId}
             onChange={(e) => selectVariant(e.target.value)}
             className={inputClass}
-          >
+           id="varian">
             <option value="">Pilih varian…</option>
             {[...groups.entries()].map(([category, variants]) => (
               <optgroup key={category} label={category}>
@@ -153,7 +153,7 @@ function AddBookingItemForm({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="jumlah" className="block text-sm font-medium text-gray-700 mb-1.5">
             Jumlah
           </label>
           <input
@@ -163,10 +163,10 @@ function AddBookingItemForm({
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             className={inputClass}
-          />
+           id="jumlah" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="harga-satuan-rp" className="block text-sm font-medium text-gray-700 mb-1.5">
             Harga Satuan (Rp)
           </label>
           <input
@@ -175,7 +175,7 @@ function AddBookingItemForm({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             className={inputClass}
-          />
+           id="harga-satuan-rp" />
           {includedVariantIds.has(variantId) && (
             <p className="mt-1 text-xs text-gray-400">
               Termasuk paket — default gratis, bisa diubah.

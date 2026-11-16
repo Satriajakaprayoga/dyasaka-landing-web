@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { revalidateInvoices } from '@/lib/revalidate-public';
+import { todayKey } from '@/lib/date';
 
 /**
  * Append-only money ledger (§12). No DELETE export — a mistake is
@@ -123,13 +125,13 @@ export async function GET(req: NextRequest) {
   ]);
 
   if (main.error) {
-    return NextResponse.json({ error: main.error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(main.error) }, { status: 500 });
   }
   if ('error' in totalsRes) {
-    return NextResponse.json({ error: totalsRes.error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(totalsRes.error) }, { status: 500 });
   }
   if (reversed.error) {
-    return NextResponse.json({ error: reversed.error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(reversed.error) }, { status: 500 });
   }
 
   const data = main.data ?? [];
@@ -216,7 +218,7 @@ export async function POST(req: NextRequest) {
   const transaction_date =
     typeof body.transaction_date === 'string' && ISO_DATE.test(body.transaction_date)
       ? body.transaction_date
-      : new Date().toISOString().slice(0, 10);
+      : todayKey();
 
   const period_start = dateOrNull(body.period_start);
   const period_end = dateOrNull(body.period_end);
@@ -254,7 +256,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     // Invalid uuid in one of the optional links lands here (23503).
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // A ledger row linked to an invoice changes its public amount_paid /
@@ -345,7 +347,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (catError) {
-      return NextResponse.json({ error: catError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(catError) }, { status: 500 });
     }
     mirror = created;
   }
@@ -358,7 +360,7 @@ export async function PATCH(req: NextRequest) {
       direction: flipped,
       amount: original.amount,
       // The money moved back today, not on the original date.
-      transaction_date: new Date().toISOString().slice(0, 10),
+      transaction_date: todayKey(),
       category_id: mirror.id,
       account: original.account,
       description: original.description
@@ -379,7 +381,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Reversing a payment row changes the invoice's public paid figures.

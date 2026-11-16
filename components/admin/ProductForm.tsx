@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { revalidatePublicCatalog } from "@/lib/revalidate-public";
@@ -61,13 +61,11 @@ async function compressImage(file: File): Promise<File> {
 }
 
 function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const [url, setUrl] = useState<string>("");
+  // Derived from the file, not state: creating the URL during render is
+  // pure, and the effect only owns its cleanup.
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
 
-  useEffect(() => {
-    const objectUrl = URL.createObjectURL(file);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
 
   return (
     <div className="relative">
@@ -367,13 +365,13 @@ export default function ProductForm({ categories, vendors, product }: Props) {
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className={labelClass}>Kategori</label>
+          <label htmlFor="kategori" className={labelClass}>Kategori</label>
           <select
             required
             value={form.category_id}
             onChange={(e) => update("category_id", e.target.value)}
             className={inputClass}
-          >
+           id="kategori">
             <option value="">Pilih kategori</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -384,29 +382,29 @@ export default function ProductForm({ categories, vendors, product }: Props) {
         </div>
 
         <div>
-          <label className={labelClass}>Nama Produk</label>
+          <label htmlFor="nama-produk" className={labelClass}>Nama Produk</label>
           <input
             type="text"
             required
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
             className={inputClass}
-          />
+           id="nama-produk" />
         </div>
 
         <div>
-          <label className={labelClass}>Deskripsi</label>
+          <label htmlFor="deskripsi" className={labelClass}>Deskripsi</label>
           <textarea
             value={form.description}
             onChange={(e) => update("description", e.target.value)}
             className={inputClass}
             rows={3}
-          />
+           id="deskripsi" />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Harga (Rp)</label>
+            <label htmlFor="harga-rp" className={labelClass}>Harga (Rp)</label>
             <input
               type="number"
               required
@@ -414,16 +412,16 @@ export default function ProductForm({ categories, vendors, product }: Props) {
               value={form.price}
               onChange={(e) => update("price", e.target.value)}
               className={inputClass}
-            />
+             id="harga-rp" />
           </div>
           {isEdit && (
             <div>
-              <label className={labelClass}>Status</label>
+              <label htmlFor="status" className={labelClass}>Status</label>
               <select
                 value={form.is_active}
                 onChange={(e) => update("is_active", e.target.value)}
                 className={inputClass}
-              >
+               id="status">
                 <option value="true">Aktif</option>
                 <option value="false">Nonaktif</option>
               </select>
@@ -433,12 +431,12 @@ export default function ProductForm({ categories, vendors, product }: Props) {
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Vendor (opsional)</label>
+            <label htmlFor="vendor-opsional" className={labelClass}>Vendor (opsional)</label>
             <select
               value={form.vendor_id}
               onChange={(e) => update("vendor_id", e.target.value)}
               className={inputClass}
-            >
+             id="vendor-opsional">
               <option value="">Tanpa vendor</option>
               {vendors.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -449,7 +447,7 @@ export default function ProductForm({ categories, vendors, product }: Props) {
             </select>
           </div>
           <div>
-            <label className={labelClass}>Harga Vendor (Rp)</label>
+            <label htmlFor="harga-vendor-rp" className={labelClass}>Harga Vendor (Rp)</label>
             <input
               type="number"
               min={0}
@@ -457,7 +455,7 @@ export default function ProductForm({ categories, vendors, product }: Props) {
               onChange={(e) => update("vendor_price", e.target.value)}
               placeholder="Harga beli dari vendor"
               className={inputClass}
-            />
+             id="harga-vendor-rp" />
             {showMargin && (
               <p
                 className={
@@ -474,7 +472,9 @@ export default function ProductForm({ categories, vendors, product }: Props) {
         </div>
 
         <div>
-          <label className={labelClass}>Foto Produk</label>
+          <label htmlFor="foto-produk-input" className={labelClass}>
+            Foto Produk
+          </label>
           <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 px-4 py-6 text-center transition hover:border-gray-400 hover:bg-gray-50">
             <ImageIcon className="h-6 w-6 text-gray-400" />
             <span className="text-sm text-gray-600">Klik untuk pilih foto</span>
@@ -483,6 +483,7 @@ export default function ProductForm({ categories, vendors, product }: Props) {
               pilih beberapa
             </span>
             <input
+              id="foto-produk-input"
               type="file"
               accept="image/*"
               multiple

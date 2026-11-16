@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { recomputePlanStatus } from '@/lib/plan-status';
+import { todayKey } from '@/lib/date';
 
 /**
  * Purchase orders (§11) — the bridge between plans, ledger and
@@ -142,7 +144,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const { data: items, error: itemsError } = await supabase
@@ -159,7 +161,7 @@ export async function POST(req: NextRequest) {
 
   if (itemsError || !items) {
     return NextResponse.json(
-      { error: itemsError?.message ?? 'Gagal menyimpan baris' },
+      { error: apiErrorMessage(itemsError, 'Gagal menyimpan baris') },
       { status: 500 },
     );
   }
@@ -262,7 +264,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
     }
 
     return NextResponse.json({ order: updated });
@@ -279,13 +281,13 @@ export async function PATCH(req: NextRequest) {
 
     const { data: updated, error } = await supabase
       .from('purchase_orders')
-      .update({ status: 'ordered', order_date: new Date().toISOString().slice(0, 10) })
+      .update({ status: 'ordered', order_date: todayKey() })
       .eq('id', order.id)
       .select()
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
     }
 
     return NextResponse.json({ order: updated });
@@ -369,7 +371,7 @@ export async function PATCH(req: NextRequest) {
         note: poLabel,
       });
       if (mvError) {
-        return NextResponse.json({ error: mvError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(mvError) }, { status: 500 });
       }
 
       if (variant) {
@@ -378,7 +380,7 @@ export async function PATCH(req: NextRequest) {
           .update({ stock_quantity: Number(variant.stock_quantity) + u.qty })
           .eq('id', u.variantId);
         if (stockError) {
-          return NextResponse.json({ error: stockError.message }, { status: 500 });
+          return NextResponse.json({ error: apiErrorMessage(stockError) }, { status: 500 });
         }
       }
     }
@@ -410,7 +412,7 @@ export async function PATCH(req: NextRequest) {
         .update({ quantity_received: item.quantity_received + u.qty })
         .eq('id', u.itemId);
       if (updError) {
-        return NextResponse.json({ error: updError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(updError) }, { status: 500 });
       }
     }
 
@@ -439,7 +441,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (orderError) {
-      return NextResponse.json({ error: orderError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(orderError) }, { status: 500 });
     }
 
     // Plan lines fulfilled through this order may now be done.
@@ -480,7 +482,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
     }
 
     // Unlink plan lines — a cancelled order is not "ordered".
@@ -581,7 +583,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (txError) {
-      return NextResponse.json({ error: txError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(txError) }, { status: 500 });
     }
 
     const newPaid = paid + amount;
@@ -634,7 +636,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('purchase_orders').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

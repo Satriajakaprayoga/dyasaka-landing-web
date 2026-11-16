@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { buildWhatsAppInquiryLink } from "@/lib/booking-helpers";
+import { formatDateID, todayKey } from "@/lib/date";
 
 const BUSINESS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_WA_NUMBER ?? "";
 
@@ -10,12 +11,6 @@ const inputClass =
   "w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-100";
 
 const labelClass = "mb-1.5 block text-xs font-medium text-gray-600";
-
-function todayISO() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 /**
  * "Booking Sekarang" trigger button + modal form. Visitors (anon) insert
@@ -45,6 +40,7 @@ export default function BookingModal({
 
   const nameRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -66,7 +62,28 @@ export default function BookingModal({
     nameRef.current?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") {
+        close();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+
+      // Keep Tab inside the dialog: without this, focus escapes to the
+      // page behind the modal and screen-reader users lose context.
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -86,7 +103,7 @@ export default function BookingModal({
       return setError("Nomor WhatsApp tidak valid (8–15 digit).");
     }
     if (!date) return setError("Tanggal acara wajib dipilih.");
-    if (date < todayISO()) return setError("Tanggal acara tidak boleh sudah lewat.");
+    if (date < todayKey()) return setError("Tanggal acara tidak boleh sudah lewat.");
     if (address.trim().length === 0) return setError("Alamat acara wajib diisi.");
 
     setSubmitting(true);
@@ -151,6 +168,7 @@ export default function BookingModal({
 
       {open && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Booking ${productName}`}
@@ -179,7 +197,7 @@ export default function BookingModal({
                 <h2 className="mt-4 text-lg font-bold text-gray-900">Booking Terkirim!</h2>
                 <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
                   Booking Anda untuk <span className="font-medium text-gray-700">{productName}</span>{" "}
-                  pada {date} sudah kami terima dengan status{" "}
+                  pada {formatDateID(date)} sudah kami terima dengan status{" "}
                   <span className="font-medium text-amber-600">menunggu konfirmasi</span>.
                   Admin akan menghubungi Anda via WhatsApp.
                 </p>
@@ -268,12 +286,12 @@ export default function BookingModal({
                       id="bk-date"
                       type="date"
                       value={date}
-                      min={todayISO()}
+                      min={todayKey()}
                       onChange={(e) => setDate(e.target.value)}
                       required
                       className={inputClass}
                     />
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-gray-500">
                       Cek kalender ketersediaan di bawah sebelum memilih tanggal.
                     </p>
                   </div>
@@ -297,7 +315,7 @@ export default function BookingModal({
                   <div>
                     <label htmlFor="bk-theme" className={labelClass}>
                       Tema Dekorasi{" "}
-                      <span className="font-normal text-gray-400">(opsional)</span>
+                      <span className="font-normal text-gray-500">(opsional)</span>
                     </label>
                     <input
                       id="bk-theme"
@@ -313,7 +331,7 @@ export default function BookingModal({
                   <div>
                     <label htmlFor="bk-message" className={labelClass}>
                       Catatan{" "}
-                      <span className="font-normal text-gray-400">(opsional)</span>
+                      <span className="font-normal text-gray-500">(opsional)</span>
                     </label>
                     <textarea
                       id="bk-message"
@@ -339,7 +357,7 @@ export default function BookingModal({
                   >
                     {submitting ? "Mengirim..." : "Kirim Booking"}
                   </button>
-                  <p className="text-center text-xs text-gray-400">
+                  <p className="text-center text-xs text-gray-500">
                     Booking masuk dengan status menunggu konfirmasi. Gratis, tanpa
                     pembayaran di langkah ini.
                   </p>

@@ -360,8 +360,14 @@ export default function LedgerView() {
         <form onSubmit={handleCreate} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Arah</label>
-              <div className="grid grid-cols-2 gap-2">
+              <span id="arah-label" className={labelClass}>
+                Arah
+              </span>
+              <div
+                role="group"
+                aria-labelledby="arah-label"
+                className="grid grid-cols-2 gap-2"
+              >
                 {(["in", "out"] as const).map((d) => (
                   <button
                     key={d}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 
 function clean(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query.range(from, from + limit - 1);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const total = count ?? 0;
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ vendor: data }, { status: 201 });
@@ -151,7 +152,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ vendor: data });
@@ -178,7 +179,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('vendors').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

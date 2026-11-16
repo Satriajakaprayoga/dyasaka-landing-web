@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 
 /**
  * Staff assignments per booking (§13). Works like booking vendors:
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ assignment: data }, { status: 201 });
@@ -127,7 +128,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ assignment: data });
@@ -152,7 +153,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('booking_staff').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

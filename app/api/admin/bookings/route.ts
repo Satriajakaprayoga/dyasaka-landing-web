@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 
 const BOOKING_STATUSES = ['pending', 'confirmed', 'done', 'cancelled'] as const;
 
@@ -46,11 +47,11 @@ export async function GET(req: NextRequest) {
     ]);
 
     if (direct.error) {
-      return NextResponse.json({ error: direct.error.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(direct.error) }, { status: 500 });
     }
     if (viaProducts.error) {
       return NextResponse.json(
-        { error: viaProducts.error.message },
+        { error: apiErrorMessage(viaProducts.error) },
         { status: 500 },
       );
     }
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
         .in('product_id', productIds);
       if (viaBooking.error) {
         return NextResponse.json(
-          { error: viaBooking.error.message },
+          { error: apiErrorMessage(viaBooking.error) },
           { status: 500 },
         );
       }
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query.range(from, from + limit - 1);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const total = count ?? 0;
@@ -178,7 +179,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Seed booking_items from the product recipe — unit_price is a frozen
@@ -194,7 +195,7 @@ export async function POST(req: NextRequest) {
       .eq('product_id', data.product_id);
 
     if (recipeError) {
-      return NextResponse.json({ error: recipeError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(recipeError) }, { status: 500 });
     }
 
     // Untyped client infers embeds as arrays; PostgREST returns objects
@@ -225,7 +226,7 @@ export async function POST(req: NextRequest) {
       );
 
       if (seedError) {
-        return NextResponse.json({ error: seedError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(seedError) }, { status: 500 });
       }
     }
   }
@@ -284,7 +285,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ booking: data });
@@ -309,7 +310,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('bookings').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // DB trigger recalculates date_capacity.booked_count on delete.

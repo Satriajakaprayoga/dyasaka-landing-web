@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { revalidateInvoices } from '@/lib/revalidate-public';
+import { todayKey } from '@/lib/date';
 import type { InvoiceLineSource } from '@/lib/types';
 
 /**
@@ -274,7 +276,7 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   if (lines.length > 0) {
@@ -283,7 +285,7 @@ export async function POST(req: NextRequest) {
       .insert(lines.map((l) => ({ ...l, invoice_id: invoice.id })));
 
     if (itemsError) {
-      return NextResponse.json({ error: itemsError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(itemsError) }, { status: 500 });
     }
   }
 
@@ -349,7 +351,7 @@ export async function PATCH(req: NextRequest) {
       .eq('invoice_id', invoice.id);
 
     if (delError) {
-      return NextResponse.json({ error: delError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(delError) }, { status: 500 });
     }
 
     if (parsed.lines.length > 0) {
@@ -358,7 +360,7 @@ export async function PATCH(req: NextRequest) {
       );
 
       if (insError) {
-        return NextResponse.json({ error: insError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(insError) }, { status: 500 });
       }
     }
 
@@ -376,7 +378,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (updError) {
-      return NextResponse.json({ error: updError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(updError) }, { status: 500 });
     }
 
     const { data: items } = await supabase
@@ -452,7 +454,7 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     const subtotal = items.reduce((s, r) => s + Number(r.line_total), 0);
-    const issueDate = new Date().toISOString().slice(0, 10);
+    const issueDate = todayKey();
     const [year, month] = issueDate.split('-');
     const lastDay = new Date(
       Date.UTC(Number(year), Number(month), 0),
@@ -501,7 +503,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ invoice: updated, items });
       }
       if (issueError.code !== '23505' || attempt === 5) {
-        return NextResponse.json({ error: issueError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(issueError) }, { status: 500 });
       }
     }
 
@@ -557,7 +559,7 @@ export async function PATCH(req: NextRequest) {
           typeof body.transaction_date === 'string' &&
           /^\d{4}-\d{2}-\d{2}$/.test(body.transaction_date)
             ? body.transaction_date
-            : new Date().toISOString().slice(0, 10),
+            : todayKey(),
         category_id: category.id,
         account: typeof body.account === 'string' && body.account.trim() !== ''
           ? body.account.trim()
@@ -570,7 +572,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (txError) {
-      return NextResponse.json({ error: txError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(txError) }, { status: 500 });
     }
 
     // Settled → paid; otherwise the invoice stays issued. The row is
@@ -584,7 +586,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (updError) {
-      return NextResponse.json({ error: updError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(updError) }, { status: 500 });
     }
 
     // amount_paid / balance_due / status render live on the public
@@ -615,7 +617,7 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
     }
 
     // Void turns the old token's page into the "replaced" notice —
@@ -662,7 +664,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('invoices').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

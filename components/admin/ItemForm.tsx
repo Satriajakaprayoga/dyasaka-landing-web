@@ -121,6 +121,7 @@ function CategoryCombobox({
   return (
     <div ref={containerRef} className="relative">
       <input
+        id="kategori-item"
         type="text"
         required
         role="combobox"
@@ -288,7 +289,7 @@ export default function ItemForm({ itemCategories, item }: Props) {
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className={labelClass}>Nama Item</label>
+          <label htmlFor="nama-item" className={labelClass}>Nama Item</label>
           <input
             type="text"
             required
@@ -296,11 +297,13 @@ export default function ItemForm({ itemCategories, item }: Props) {
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
             className={inputClass}
-          />
+           id="nama-item" />
         </div>
 
         <div>
-          <label className={labelClass}>Kategori Item</label>
+          <label htmlFor="kategori-item" className={labelClass}>
+            Kategori Item
+          </label>
           <CategoryCombobox
             suggestions={itemCategories}
             value={form.item_category}
@@ -313,8 +316,14 @@ export default function ItemForm({ itemCategories, item }: Props) {
         </div>
 
         <div>
-          <label className={labelClass}>Tipe</label>
-          <div className="grid grid-cols-2 gap-2">
+          <span id="tipe-label" className={labelClass}>
+            Tipe
+          </span>
+          <div
+            role="group"
+            aria-labelledby="tipe-label"
+            className="grid grid-cols-2 gap-2"
+          >
             {typeOptions.map((t) => (
               <button
                 key={t.value}
@@ -336,7 +345,7 @@ export default function ItemForm({ itemCategories, item }: Props) {
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Pieces per Unit (opsional)</label>
+            <label htmlFor="pieces-per-unit-opsional" className={labelClass}>Pieces per Unit (opsional)</label>
             <input
               type="number"
               min={0}
@@ -344,14 +353,14 @@ export default function ItemForm({ itemCategories, item }: Props) {
               onChange={(e) => update("pieces_per_unit", e.target.value)}
               className={inputClass}
               placeholder="mis. 6"
-            />
+             id="pieces-per-unit-opsional" />
             <p className="mt-1 text-xs text-gray-400">
               Informasional — mis. 1 unit stand terdiri dari 6 piece.
             </p>
           </div>
           {form.type === "rentable" && (
             <div>
-              <label className={labelClass}>Quantity Owned</label>
+              <label htmlFor="quantity-owned" className={labelClass}>Quantity Owned</label>
               <input
                 type="number"
                 required
@@ -359,7 +368,7 @@ export default function ItemForm({ itemCategories, item }: Props) {
                 value={form.quantity_owned}
                 onChange={(e) => update("quantity_owned", e.target.value)}
                 className={inputClass}
-              />
+               id="quantity-owned" />
               <p className="mt-1 text-xs text-gray-400">
                 Jumlah unit sewa utuh yang dimiliki.
               </p>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { todayKey } from "@/lib/date";
 import type {
   PurchaseOrder,
   PurchaseOrderItem,
@@ -74,7 +75,7 @@ export default function OrderDetailPage() {
   // Payment form.
   const [paying, setPaying] = useState(false);
   const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(() => todayKey());
   const [payAccount, setPayAccount] = useState("");
 
   // Header edit (draft|ordered).
@@ -360,22 +361,22 @@ export default function OrderDetailPage() {
         {editing ? (
           <form onSubmit={handleSaveHeader} className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Target datang</label>
+              <label htmlFor="target-datang" className={labelClass}>Target datang</label>
               <input
                 type="date"
                 value={editExpected}
                 onChange={(e) => setEditExpected(e.target.value)}
                 className={inputClass}
-              />
+               id="target-datang" />
             </div>
             <div>
-              <label className={labelClass}>Catatan</label>
+              <label htmlFor="catatan" className={labelClass}>Catatan</label>
               <input
                 type="text"
                 value={editNote}
                 onChange={(e) => setEditNote(e.target.value)}
                 className={inputClass}
-              />
+               id="catatan" />
             </div>
             <div className="flex justify-end gap-2 sm:col-span-2">
               <button
@@ -584,7 +585,7 @@ export default function OrderDetailPage() {
               sisa {receivingLine.quantity_ordered - receivingLine.quantity_received}
             </div>
             <div className="w-24">
-              <label className={`${labelClass} text-xs`}>Jumlah</label>
+              <label htmlFor="jumlah" className={`${labelClass} text-xs`}>Jumlah</label>
               <input
                 type="number"
                 min={1}
@@ -593,7 +594,7 @@ export default function OrderDetailPage() {
                 value={receiveQty}
                 onChange={(e) => setReceiveQty(e.target.value)}
                 className={inputClass}
-              />
+               id="jumlah" />
             </div>
             <div className="flex gap-2 pb-0.5">
               <button
@@ -667,7 +668,7 @@ export default function OrderDetailPage() {
             <form onSubmit={performPay} className="space-y-3 border-t border-gray-100 pt-3">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label className={labelClass}>Nominal</label>
+                  <label htmlFor="nominal" className={labelClass}>Nominal</label>
                   <input
                     type="number"
                     min={1}
@@ -677,27 +678,27 @@ export default function OrderDetailPage() {
                     onChange={(e) => setPayAmount(e.target.value)}
                     placeholder={String(remaining)}
                     className={inputClass}
-                  />
+                   id="nominal" />
                 </div>
                 <div>
-                  <label className={labelClass}>Tanggal</label>
+                  <label htmlFor="tanggal" className={labelClass}>Tanggal</label>
                   <input
                     type="date"
                     required
                     value={payDate}
                     onChange={(e) => setPayDate(e.target.value)}
                     className={inputClass}
-                  />
+                   id="tanggal" />
                 </div>
                 <div>
-                  <label className={labelClass}>Akun (opsional)</label>
+                  <label htmlFor="akun-opsional" className={labelClass}>Akun (opsional)</label>
                   <input
                     type="text"
                     value={payAccount}
                     onChange={(e) => setPayAccount(e.target.value)}
                     placeholder="mis. Cash, BCA"
                     className={inputClass}
-                  />
+                   id="akun-opsional" />
                 </div>
               </div>
               <div className="flex justify-end gap-2">

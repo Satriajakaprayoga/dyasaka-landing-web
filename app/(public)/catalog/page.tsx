@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { unstable_cache } from 'next/cache';
 import type { Category, Product, ProductImage } from '@/lib/types';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ProductCard } from '@/components/landing/ProductCard';
 import type { Metadata } from 'next';
 import SortSelect from './SortSelect';
 import { SORT_OPTIONS } from './sort-options';
@@ -72,17 +72,23 @@ const getCategories = unstable_cache(
   { tags: ['catalog-data'] },
 );
 
-// page is deliberately NOT part of the key: the query fetches the full
-// filtered set and the page component slices it, so /catalog?page=1
-// and ?page=2 share one cached entry.
+// Each page is queried with range() and counted in Postgres, so the
+// catalog never loads the whole filtered set into memory. `page` is part
+// of the cache key; every entry shares the 'catalog-data' tag and is
+// purged by admin mutations.
 const getProducts = unstable_cache(
-  async (filters: Pick<SearchParams, 'q' | 'category' | 'min_price' | 'max_price' | 'sort'>) => {
+  async (
+    filters: Pick<SearchParams, 'q' | 'category' | 'min_price' | 'max_price' | 'sort'> & {
+      page: number;
+    },
+  ) => {
     let query = supabase
       .from('products')
       // Explicit columns — anon only has column-level SELECT on products
       // (migration 20261025100000); `select=*` fails with permission denied.
       .select(
         'id, category_id, name, description, price, is_active, created_at, updated_at, product_images(image_url, sort_order), categories(name)',
+        { count: 'exact' },
       )
       .eq('is_active', true);
 
@@ -123,8 +129,12 @@ const getProducts = unstable_cache(
         query = query.order('created_at', { ascending: false });
     }
 
-    const { data } = await query;
-    return (data ?? []) as unknown as ProductRow[];
+    const from = (filters.page - 1) * PAGE_SIZE;
+    const { data, count } = await query.range(from, from + PAGE_SIZE - 1);
+    return {
+      items: (data ?? []) as unknown as ProductRow[],
+      total: count ?? 0,
+    };
   },
   ['catalog-products'],
   { tags: ['catalog-data'] },
@@ -159,20 +169,28 @@ export default async function CatalogPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
   const searchParams = await props.searchParams;
-  const [categories, products] = await Promise.all([
+  const filters = {
+    q: searchParams.q,
+    category: searchParams.category,
+    min_price: searchParams.min_price,
+    max_price: searchParams.max_price,
+    sort: searchParams.sort,
+  };
+
+  const requestedPage = Math.max(1, Number(searchParams.page) || 1);
+  const [categories, firstResult] = await Promise.all([
     getCategories(),
-    getProducts({
-      q: searchParams.q,
-      category: searchParams.category,
-      min_price: searchParams.min_price,
-      max_price: searchParams.max_price,
-      sort: searchParams.sort,
-    }),
+    getProducts({ ...filters, page: requestedPage }),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
-  const page = Math.min(Math.max(1, Number(searchParams.page) || 1), totalPages);
-  const pageItems = products.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(firstResult.total / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  // ?page=99 is clamped to the last page instead of rendering an empty list.
+  const result =
+    page === requestedPage
+      ? firstResult
+      : await getProducts({ ...filters, page });
+  const pageItems = result.items;
 
   const activeCategory = categories.find((c) => c.id === searchParams.category);
   const sortLabel = SORT_OPTIONS.find((o) => o.value === searchParams.sort)?.label;
@@ -195,7 +213,7 @@ export default async function CatalogPage(props: {
           </p>
         </div>
         <p className="text-sm text-gray-500" aria-live="polite">
-          {products.length} produk ditemukan
+          {result.total} produk ditemukan
         </p>
       </div>
 
@@ -328,7 +346,7 @@ export default async function CatalogPage(props: {
       )}
 
       {/* Results */}
-      {products.length === 0 ? (
+      {pageItems.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 py-16 text-center">
           <BalloonIcon className="h-12 w-12 text-pink-200" />
           <p className="mt-4 font-medium text-gray-900">Tidak ada produk yang cocok</p>
@@ -347,47 +365,13 @@ export default async function CatalogPage(props: {
       ) : (
         <>
           <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
-            {pageItems.map((product, index) => {
-              const cover = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order)[0];
-              return (
-                <Link
-                  key={product.id}
-                  href={`/product/${product.id}`}
-                  className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
-                >
-                  <div className="relative aspect-square overflow-hidden bg-pink-50">
-                    {cover ? (
-                      <Image
-                        src={cover.image_url}
-                        alt={product.name}
-                        fill
-                        priority={index < 3}
-                        sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
-                        className="object-cover transition duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-pink-300">
-                        <BalloonIcon className="h-10 w-10" />
-                        <span className="text-xs">Tanpa foto</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-1 p-4">
-                    {product.categories?.name && (
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                        {product.categories.name}
-                      </p>
-                    )}
-                    <h2 className="line-clamp-2 font-semibold leading-snug text-gray-900 transition group-hover:text-pink-600">
-                      {product.name}
-                    </h2>
-                    <p className="pt-1 font-bold text-pink-600">
-                      Rp {product.price.toLocaleString('id-ID')}
-                    </p>
-                  </div>
-                </Link>
-              );
-            })}
+            {pageItems.map((product, index) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                priority={index < 3}
+              />
+            ))}
           </div>
 
           {totalPages > 1 && (

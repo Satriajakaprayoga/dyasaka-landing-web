@@ -66,7 +66,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-8 border-t border-gray-100 pt-6 text-center text-xs text-gray-400">
+        <div className="mt-8 border-t border-gray-100 pt-6 text-center text-xs text-gray-500">
           &copy; {new Date().getFullYear()} Dyasaka Decoration. Semua hak
           dilindungi.
         </div>

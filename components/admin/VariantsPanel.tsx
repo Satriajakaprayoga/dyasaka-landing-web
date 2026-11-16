@@ -115,39 +115,39 @@ function VariantForm({
     >
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <label className={labelClass}>Warna</label>
+          <label htmlFor="warna" className={labelClass}>Warna</label>
           <input
             type="text"
             placeholder="mis. Merah"
             value={form.color}
             onChange={(e) => update("color", e.target.value)}
             className={inputClass}
-          />
+           id="warna" />
         </div>
         <div>
-          <label className={labelClass}>Ukuran</label>
+          <label htmlFor="ukuran" className={labelClass}>Ukuran</label>
           <input
             type="text"
             placeholder="mis. 12 inci"
             value={form.size}
             onChange={(e) => update("size", e.target.value)}
             className={inputClass}
-          />
+           id="ukuran" />
         </div>
         <div>
-          <label className={labelClass}>SKU (opsional)</label>
+          <label htmlFor="sku-opsional" className={labelClass}>SKU (opsional)</label>
           <input
             type="text"
             value={form.sku}
             onChange={(e) => update("sku", e.target.value)}
             className={inputClass}
-          />
+           id="sku-opsional" />
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <label className={labelClass}>Harga Saat Ini (Rp)</label>
+          <label htmlFor="harga-saat-ini-rp" className={labelClass}>Harga Saat Ini (Rp)</label>
           <input
             type="number"
             required
@@ -155,7 +155,7 @@ function VariantForm({
             value={form.current_price}
             onChange={(e) => update("current_price", e.target.value)}
             className={inputClass}
-          />
+           id="harga-saat-ini-rp" />
           {isEdit && (
             <p className="mt-1 text-xs text-gray-400">
               Perubahan harga dicatat ke riwayat harga.
@@ -163,28 +163,28 @@ function VariantForm({
           )}
         </div>
         <div>
-          <label className={labelClass}>Reorder Point (opsional)</label>
+          <label htmlFor="reorder-point-opsional" className={labelClass}>Reorder Point (opsional)</label>
           <input
             type="number"
             min={0}
             value={form.reorder_point}
             onChange={(e) => update("reorder_point", e.target.value)}
             className={inputClass}
-          />
+           id="reorder-point-opsional" />
           <p className="mt-1 text-xs text-gray-400">
             Peringatan stok rendah saat stok ≤ nilai ini.
           </p>
         </div>
         {!isEdit && (
           <div>
-            <label className={labelClass}>Stok Awal</label>
+            <label htmlFor="stok-awal" className={labelClass}>Stok Awal</label>
             <input
               type="number"
               min={0}
               value={form.stock_quantity}
               onChange={(e) => update("stock_quantity", e.target.value)}
               className={inputClass}
-            />
+             id="stok-awal" />
             <p className="mt-1 text-xs text-gray-400">
               Tercatat sebagai movement &quot;Stok awal&quot;.
             </p>
@@ -241,12 +241,12 @@ function MovementForm({
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
-          <label className={labelClass}>Jenis</label>
+          <label htmlFor="jenis" className={labelClass}>Jenis</label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as StockMovementType)}
             className={inputClass}
-          >
+           id="jenis">
             {movementTypeOrder.map((t) => (
               <option key={t} value={t}>
                 {movementTypeLabels[t]}
@@ -255,7 +255,7 @@ function MovementForm({
           </select>
         </div>
         <div>
-          <label className={labelClass}>Jumlah</label>
+          <label htmlFor="jumlah" className={labelClass}>Jumlah</label>
           <input
             type="number"
             required
@@ -263,17 +263,17 @@ function MovementForm({
             onChange={(e) => setQuantity(e.target.value)}
             className={inputClass}
             placeholder={quantityHint(type)}
-          />
+           id="jumlah" />
         </div>
         <div>
-          <label className={labelClass}>Catatan (opsional)</label>
+          <label htmlFor="catatan-opsional" className={labelClass}>Catatan (opsional)</label>
           <input
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             className={inputClass}
             placeholder="mis. dari supplier"
-          />
+           id="catatan-opsional" />
         </div>
       </div>
       {error && (

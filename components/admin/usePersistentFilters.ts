@@ -42,7 +42,9 @@ export function usePersistentFilters<T extends Record<string, FilterValue>>(
   });
 
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
   const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const syncUrl = useCallback((next: T) => {

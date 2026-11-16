@@ -65,6 +65,14 @@ body {
   animation: confetti-fall 4.5s ease-in-out infinite;
 }
 
+/* Keyboard focus must stay visible even where a component removed the
+   browser default with `outline-none`. Unlayered so it wins over the
+   Tailwind utility layer. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #db2777;
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-page-in,
   .animate-balloon-float,

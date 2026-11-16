@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { apiErrorMessage } from "@/lib/api-error";
 import { revalidatePublicCatalog } from "@/lib/revalidate-public";
 
 export async function POST(req: NextRequest) {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Keep the append-only ledger the source of truth: initial stock is
@@ -123,7 +124,7 @@ export async function PATCH(req: NextRequest) {
 
     if (historyError) {
       return NextResponse.json(
-        { error: historyError.message },
+        { error: apiErrorMessage(historyError) },
         { status: 500 },
       );
     }
@@ -139,7 +140,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();
@@ -177,7 +178,7 @@ export async function DELETE(req: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();

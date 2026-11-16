@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { buildWhatsAppLink, normalizePhoneToWa } from "@/lib/booking-helpers";
+
+const emptySubscribe = () => () => {};
 import type {
   Booking,
   CompanyBankAccount,
@@ -109,16 +111,18 @@ export default function InvoiceManager({
     () => new Date().toISOString().slice(0, 10),
   );
 
-  const [origin, setOrigin] = useState("");
+  // Client-only value without setState-in-effect: the server snapshot is
+  // empty, the client snapshot is the real origin.
+  const origin = useSyncExternalStore(
+    emptySubscribe,
+    () => window.location.origin,
+    () => "",
+  );
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
 
   const isDraft = invoice.status === "draft";
   const isIssued = invoice.status === "issued";

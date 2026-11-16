@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { todayKey } from "@/lib/date";
 import Link from "next/link";
 import type { Booking, Product } from "@/lib/types";
 import {
@@ -23,7 +24,7 @@ import {
 } from "@/components/admin/skeletons";
 
 export default function AdminHomePage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
 
   return (
     <div className="space-y-8">
@@ -182,7 +183,7 @@ async function StatsGrid() {
 
 async function UpcomingBookings() {
   const supabase = await createServerSupabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
 
   const { data: upcoming } = await supabase
     .from("bookings")

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 
 /**
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
     .order('id');
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ items: data ?? [] });
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Recipe rows render in "Paket Termasuk" on the product page.
@@ -148,7 +149,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();
@@ -179,7 +180,7 @@ export async function DELETE(req: NextRequest) {
   if (error) {
     // Surfaces RESTRICT violations, e.g. the underlying variant is
     // protected by its own RESTRICT chain.
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();

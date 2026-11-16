@@ -218,7 +218,7 @@ export default async function ProductPage(props: {
             </a>
 
             <div
-              className="my-3 flex items-center gap-3 text-xs text-gray-400"
+              className="my-3 flex items-center gap-3 text-xs text-gray-500"
               aria-hidden="true"
             >
               <span className="h-px flex-1 bg-gray-200" />
@@ -239,7 +239,7 @@ export default async function ProductPage(props: {
                     <span>
                       <span className="font-semibold text-gray-900">{item.quantity}&times;</span>{' '}
                       {item.name}
-                      {item.details && <span className="text-gray-400"> &middot; {item.details}</span>}
+                      {item.details && <span className="text-gray-500"> &middot; {item.details}</span>}
                     </span>
                   </li>
                 ))}

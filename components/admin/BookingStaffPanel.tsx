@@ -298,7 +298,7 @@ export default function BookingStaffPanel({
                   >
                     <div className="grid gap-2 sm:grid-cols-[130px_130px_1fr]">
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-500">
+                        <label htmlFor="jumlah" className="mb-1 block text-xs font-medium text-gray-500">
                           Jumlah
                         </label>
                         <input
@@ -309,10 +309,10 @@ export default function BookingStaffPanel({
                           required
                           defaultValue={remaining > 0 ? remaining : a.planned_pay}
                           className={inputClass}
-                        />
+                         id="jumlah" />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-500">
+                        <label htmlFor="tanggal" className="mb-1 block text-xs font-medium text-gray-500">
                           Tanggal
                         </label>
                         <input
@@ -320,17 +320,17 @@ export default function BookingStaffPanel({
                           type="date"
                           defaultValue={new Date().toISOString().slice(0, 10)}
                           className={inputClass}
-                        />
+                         id="tanggal" />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-500">
+                        <label htmlFor="kategori" className="mb-1 block text-xs font-medium text-gray-500">
                           Kategori
                         </label>
                         <select
                           name="category_id"
                           defaultValue={defaultCategory?.id ?? ""}
                           className={inputClass}
-                        >
+                         id="kategori">
                           {categories.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}

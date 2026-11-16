@@ -104,12 +104,12 @@ function AddRecipeForm({
     >
       <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
         <div>
-          <label className={labelClass}>Varian</label>
+          <label htmlFor="varian" className={labelClass}>Varian</label>
           <select
             value={variantId}
             onChange={(e) => setVariantId(e.target.value)}
             className={inputClass}
-          >
+           id="varian">
             <option value="">Pilih varian…</option>
             {[...groups.entries()].map(([category, variants]) => (
               <optgroup key={category} label={category}>
@@ -126,7 +126,7 @@ function AddRecipeForm({
           </p>
         </div>
         <div>
-          <label className={labelClass}>Jumlah</label>
+          <label htmlFor="jumlah" className={labelClass}>Jumlah</label>
           <input
             type="number"
             required
@@ -134,7 +134,7 @@ function AddRecipeForm({
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             className={inputClass}
-          />
+           id="jumlah" />
         </div>
       </div>
 

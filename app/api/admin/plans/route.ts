@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 
 /**
  * Purchase plans (§15) — stored intentions, kept separate from
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Optional starter lines.
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       .insert(rows);
 
     if (linesError) {
-      return NextResponse.json({ error: linesError.message }, { status: 500 });
+      return NextResponse.json({ error: apiErrorMessage(linesError) }, { status: 500 });
     }
   }
 
@@ -204,7 +205,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ plan: data });
@@ -232,7 +233,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('purchase_plans').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

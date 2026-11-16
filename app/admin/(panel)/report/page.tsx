@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { toMonthKey } from "@/lib/date";
 import type { Transaction } from "@/lib/types";
 import {
   Breadcrumbs,
@@ -18,7 +19,7 @@ import { ChartIcon } from "@/components/admin/icons";
 type ListRow = Transaction & { category: { name: string } | null };
 
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return toMonthKey(new Date());
 }
 
 function shiftMonth(month: string, delta: number) {

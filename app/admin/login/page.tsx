@@ -46,7 +46,7 @@ export default function AdminLoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className={labelClass}>Email</label>
+              <label htmlFor="email" className={labelClass}>Email</label>
               <input
                 type="email"
                 placeholder="admin@dyasaka.com"
@@ -54,10 +54,10 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputClass}
-              />
+               id="email" />
             </div>
             <div>
-              <label className={labelClass}>Password</label>
+              <label htmlFor="password" className={labelClass}>Password</label>
               <input
                 type="password"
                 placeholder="••••••••"
@@ -65,7 +65,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={inputClass}
-              />
+               id="password" />
             </div>
             {error && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">

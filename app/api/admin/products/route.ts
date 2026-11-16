@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 
 // PostgREST rejects non-uuid literals for uuid columns with a 400, so a
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query.range(from, from + limit - 1);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const total = count ?? 0;
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // New product may now appear on the landing/catalog.
@@ -150,7 +151,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Name/price/active state all render on the public pages.
@@ -194,7 +195,7 @@ export async function DELETE(req: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Best-effort storage cleanup — DB is already consistent at this point.

@@ -45,7 +45,7 @@ export function ProductCard({
       </div>
       <div className="space-y-1 p-4">
         {product.categories?.name && (
-          <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">
             {product.categories.name}
           </p>
         )}

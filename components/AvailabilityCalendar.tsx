@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getDateCapacityRange, isDateAvailable } from "@/lib/booking-helpers";
+import { addMonths, formatDateID, toDateKey, todayKey } from "@/lib/date";
+import { useMediaQuery } from "@/components/useMediaQuery";
 import type { DateCapacity } from "@/lib/types";
 
 type Props = {
@@ -13,16 +15,6 @@ type Props = {
 
 /** Compact mode: how far ahead visitors may browse. */
 const MAX_MONTH_NAV = 6;
-
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function addMonths(date: Date, n: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + n);
-  return d;
-}
 
 function getMonthGrid(year: number, month: number): (Date | null)[] {
   const first = new Date(year, month, 1);
@@ -51,23 +43,26 @@ export function AvailabilityCalendar({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const months = compact
+  // On phones the multi-month view is a very long page, so it collapses
+  // to one navigable month. Desktop keeps the full horizon.
+  const isNarrow = useMediaQuery("(max-width: 639px)");
+  const singleMonth = compact || isNarrow;
+  const months = singleMonth
     ? [addMonths(today, monthOffset)]
     : Array.from({ length: monthsAhead }, (_, i) => addMonths(today, i));
 
   const firstMonth = months[0];
   const lastMonth = months[months.length - 1];
-  const rangeStart = compact
-    ? toISODate(
+  const rangeStart = singleMonth
+    ? toDateKey(
         new Date(firstMonth.getFullYear(), firstMonth.getMonth(), 1),
       )
-    : toISODate(today);
-  const rangeEnd = compact
-    ? toISODate(
+    : toDateKey(today);
+  const rangeEnd = singleMonth
+    ? toDateKey(
         new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0),
       )
-    : toISODate(addMonths(today, monthsAhead));
+    : toDateKey(addMonths(today, monthsAhead));
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +84,8 @@ export function AvailabilityCalendar({
 
   if (error) return <div className="text-sm text-red-500">{error}</div>;
 
-  const todayISO = toISODate(today);
+  const todayISO = todayKey();
+  const weekdays = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
   return (
     <div
@@ -112,7 +108,7 @@ export function AvailabilityCalendar({
             className="rounded-2xl border border-gray-200 bg-white p-4"
           >
             <div className="mb-3 flex min-h-9 items-center justify-between">
-              {compact ? (
+              {singleMonth ? (
                 <>
                   <button
                     type="button"
@@ -144,7 +140,11 @@ export function AvailabilityCalendar({
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-7 gap-1" aria-busy="true">
+              <div
+                className="grid grid-cols-7 gap-1"
+                aria-busy="true"
+                aria-label="Memuat ketersediaan"
+              >
                 {Array.from({ length: 35 }).map((_, i) => (
                   <div
                     key={i}
@@ -153,42 +153,86 @@ export function AvailabilityCalendar({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-7 gap-1 text-xs">
-                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
-                  <div
-                    key={d}
-                    className="pb-1 text-center text-[11px] font-medium text-gray-400"
-                  >
-                    {d}
-                  </div>
-                ))}
-                {cells.map((date, i) => {
-                  if (!date) return <div key={i} />;
-                  const iso = toISODate(date);
-                  const isPast = iso < todayISO;
-                  const isToday = iso === todayISO;
-                  const available = isDateAvailable(iso, capacityMap, 2);
-
-                  return (
+              <div
+                role="grid"
+                aria-label={`Ketersediaan ${label}`}
+                className="grid grid-cols-7 gap-1 text-xs"
+              >
+                <div role="row" className="contents">
+                  {weekdays.map((d) => (
                     <div
-                      key={i}
-                      title={
-                        isPast ? undefined : available ? "Tersedia" : "Penuh"
-                      }
-                      className={[
-                        "flex h-7 items-center justify-center rounded-lg text-center",
-                        isPast
-                          ? "text-gray-300"
-                          : available
-                            ? "bg-green-50 font-medium text-green-700"
-                            : "bg-red-50 text-red-400 line-through",
-                        isToday ? "ring-1 ring-pink-400" : "",
-                      ].join(" ")}
+                      key={d}
+                      role="columnheader"
+                      className="pb-1 text-center text-[11px] font-medium text-gray-500"
                     >
-                      {date.getDate()}
+                      {d}
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+                {Array.from(
+                  { length: Math.ceil(cells.length / 7) },
+                  (_, weekIndex) => (
+                    <div
+                      key={weekIndex}
+                      role="row"
+                      className="contents"
+                    >
+                      {cells
+                        .slice(weekIndex * 7, weekIndex * 7 + 7)
+                        .map((date, dayIndex) => {
+                          const key = weekIndex * 7 + dayIndex;
+                          if (!date) {
+                            return (
+                              <div
+                                key={key}
+                                role="gridcell"
+                                aria-hidden="true"
+                              />
+                            );
+                          }
+                          const iso = toDateKey(date);
+                          const isPast = iso < todayISO;
+                          const isToday = iso === todayISO;
+                          const available = isDateAvailable(
+                            iso,
+                            capacityMap,
+                            2,
+                          );
+                          const statusLabel = isPast
+                            ? "sudah lewat"
+                            : available
+                              ? "tersedia"
+                              : "penuh";
+
+                          return (
+                            <div
+                              key={key}
+                              role="gridcell"
+                              aria-label={`${formatDateID(iso)}: ${statusLabel}${isToday ? ", hari ini" : ""}`}
+                              title={
+                                isPast
+                                  ? undefined
+                                  : available
+                                    ? "Tersedia"
+                                    : "Penuh"
+                              }
+                              className={[
+                                "flex h-7 items-center justify-center rounded-lg text-center",
+                                isPast
+                                  ? "text-gray-300"
+                                  : available
+                                    ? "bg-green-50 font-medium text-green-700"
+                                    : "bg-red-50 text-red-400 line-through",
+                                isToday ? "ring-1 ring-pink-400" : "",
+                              ].join(" ")}
+                            >
+                              {date.getDate()}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -196,16 +240,25 @@ export function AvailabilityCalendar({
       })}
       <div className="col-span-full mt-1 flex flex-wrap gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded border border-green-200 bg-green-50" />
+          <span
+            aria-hidden="true"
+            className="inline-block h-3 w-3 rounded border border-green-200 bg-green-50"
+          />
           Tersedia
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded border border-red-200 bg-red-50" />
+          <span
+            aria-hidden="true"
+            className="inline-block h-3 w-3 rounded border border-red-200 bg-red-50"
+          />
           Penuh
         </span>
-        {compact && (
+        {singleMonth && (
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded border border-pink-400" />
+            <span
+              aria-hidden="true"
+              className="inline-block h-3 w-3 rounded border border-pink-400"
+            />
             Hari ini
           </span>
         )}

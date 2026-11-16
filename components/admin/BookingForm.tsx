@@ -83,12 +83,12 @@ export default function BookingForm({ products, booking }: Props) {
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className={labelClass}>Produk</label>
+          <label htmlFor="produk" className={labelClass}>Produk</label>
           <select
             value={form.product_id}
             onChange={(e) => update('product_id', e.target.value)}
             className={inputClass}
-          >
+           id="produk">
             <option value="">— Custom / tanpa paket —</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
@@ -104,7 +104,7 @@ export default function BookingForm({ products, booking }: Props) {
         </div>
 
         <div>
-          <label className={labelClass}>Biaya Transport (Rp, opsional)</label>
+          <label htmlFor="biaya-transport-rp-opsional" className={labelClass}>Biaya Transport (Rp, opsional)</label>
           <input
             type="number"
             min={0}
@@ -112,40 +112,40 @@ export default function BookingForm({ products, booking }: Props) {
             value={form.transport_fee}
             onChange={(e) => update('transport_fee', e.target.value)}
             className={inputClass}
-          />
+           id="biaya-transport-rp-opsional" />
         </div>
 
         <div>
-          <label className={labelClass}>Tema</label>
+          <label htmlFor="tema" className={labelClass}>Tema</label>
           <input
             type="text"
             placeholder="mis. Superhero, Princess, Balon Emas"
             value={form.theme}
             onChange={(e) => update('theme', e.target.value)}
             className={inputClass}
-          />
+           id="tema" />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Tanggal Acara</label>
+            <label htmlFor="tanggal-acara" className={labelClass}>Tanggal Acara</label>
             <input
               type="date"
               required
               value={form.event_date}
               onChange={(e) => update('event_date', e.target.value)}
               className={inputClass}
-            />
+             id="tanggal-acara" />
           </div>
           <div>
-            <label className={labelClass}>Status</label>
+            <label htmlFor="status" className={labelClass}>Status</label>
             <select
               value={form.status}
               onChange={(e) =>
                 update('status', e.target.value as BookingStatus)
               }
               className={inputClass}
-            >
+             id="status">
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="done">Selesai</option>
@@ -160,47 +160,47 @@ export default function BookingForm({ products, booking }: Props) {
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Nama Customer</label>
+            <label htmlFor="nama-customer" className={labelClass}>Nama Customer</label>
             <input
               type="text"
               required
               value={form.customer_name}
               onChange={(e) => update('customer_name', e.target.value)}
               className={inputClass}
-            />
+             id="nama-customer" />
           </div>
           <div>
-            <label className={labelClass}>No. HP</label>
+            <label htmlFor="no-hp" className={labelClass}>No. HP</label>
             <input
               type="tel"
               required
               value={form.phone}
               onChange={(e) => update('phone', e.target.value)}
               className={inputClass}
-            />
+             id="no-hp" />
           </div>
         </div>
 
         <div>
-          <label className={labelClass}>Alamat Acara</label>
+          <label htmlFor="alamat-acara" className={labelClass}>Alamat Acara</label>
           <textarea
             required
             value={form.event_address}
             onChange={(e) => update('event_address', e.target.value)}
             className={inputClass}
             rows={2}
-          />
+           id="alamat-acara" />
         </div>
 
         <div>
-          <label className={labelClass}>Pesan / Catatan</label>
+          <label htmlFor="pesan-catatan" className={labelClass}>Pesan / Catatan</label>
           <textarea
             placeholder="Catatan tambahan dari percakapan WhatsApp"
             value={form.message}
             onChange={(e) => update('message', e.target.value)}
             className={inputClass}
             rows={3}
-          />
+           id="pesan-catatan" />
         </div>
 
         {error && (

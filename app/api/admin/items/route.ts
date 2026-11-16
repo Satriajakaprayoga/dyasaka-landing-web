@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import { revalidatePublicCatalog } from '@/lib/revalidate-public';
 import type { ItemType } from '@/lib/types';
 
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   const firstError = nameRes.error ?? variantRes.error ?? lowRes.error;
   if (firstError) {
-    return NextResponse.json({ error: firstError.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(firstError) }, { status: 500 });
   }
 
   // Intersect the candidate lists; null = no constraint from filters.
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query.range(from, from + limit - 1);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const total = count ?? 0;
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Item names render in recipe details ("Paket Termasuk").
@@ -201,7 +202,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();
@@ -239,7 +240,7 @@ export async function DELETE(req: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   await revalidatePublicCatalog();

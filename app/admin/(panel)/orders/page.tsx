@@ -114,14 +114,14 @@ function LinesEditor({
           className="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:grid-cols-[1fr_90px_130px_1fr_auto]"
         >
           <div>
-            <label className={`${labelClass} text-xs`}>
+            <label htmlFor="baris" className={`${labelClass} text-xs`}>
               Baris {i + 1}
             </label>
             <select
               value={line.item_variant_id}
               onChange={(e) => selectVariant(line.key, e.target.value)}
               className={inputClass}
-            >
+             id="baris">
               <option value="">Pilih varian…</option>
               {groups.map(([category, variants]) => (
                 <optgroup key={category} label={category}>
@@ -135,34 +135,34 @@ function LinesEditor({
             </select>
           </div>
           <div>
-            <label className={`${labelClass} text-xs`}>Jumlah</label>
+            <label htmlFor="jumlah" className={`${labelClass} text-xs`}>Jumlah</label>
             <input
               type="number"
               min={1}
               value={line.quantity}
               onChange={(e) => patchLine(line.key, { quantity: e.target.value })}
               className={inputClass}
-            />
+             id="jumlah" />
           </div>
           <div>
-            <label className={`${labelClass} text-xs`}>Harga Pokok</label>
+            <label htmlFor="harga-pokok" className={`${labelClass} text-xs`}>Harga Pokok</label>
             <input
               type="number"
               min={0}
               value={line.unit_cost}
               onChange={(e) => patchLine(line.key, { unit_cost: e.target.value })}
               className={inputClass}
-            />
+             id="harga-pokok" />
           </div>
           <div>
-            <label className={`${labelClass} text-xs`}>
+            <label htmlFor="dari-rencana-opsional" className={`${labelClass} text-xs`}>
               Dari rencana (opsional)
             </label>
             <select
               value={line.plan_line_id}
               onChange={(e) => patchLine(line.key, { plan_line_id: e.target.value })}
               className={inputClass}
-            >
+             id="dari-rencana-opsional">
               <option value="">—</option>
               {planOptions.map((p) => (
                 <option key={p.id} value={p.id}>

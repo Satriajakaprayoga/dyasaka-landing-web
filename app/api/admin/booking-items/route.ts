@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import type { ChecklistPhase } from '@/lib/types';
 
 type VariantInfo = {
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   // Checklist catch-up: if the DP checklist was already generated,
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
         .insert(checklistRows);
 
       if (catchUpError) {
-        return NextResponse.json({ error: catchUpError.message }, { status: 500 });
+        return NextResponse.json({ error: apiErrorMessage(catchUpError) }, { status: 500 });
       }
     }
   }
@@ -216,7 +217,7 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ booking_item: data });
@@ -246,7 +247,7 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('booking_items').delete().eq('id', id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

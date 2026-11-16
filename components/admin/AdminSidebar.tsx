@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMediaQuery } from "@/components/useMediaQuery";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -43,6 +44,13 @@ export default function AdminSidebar() {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // The drawer is only hidden from assistive tech on small screens. On
+  // desktop the same <aside> is the persistent sidebar, so marking it
+  // aria-hidden (the old behaviour) removed the whole admin nav from the
+  // accessibility tree even while it was visible.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const drawerHidden = !isDesktop && !drawerOpen;
+
   function isActive(href: string) {
     return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
   }
@@ -72,7 +80,8 @@ export default function AdminSidebar() {
     <>
       {/* Sidebar — static on desktop, slide-in drawer on mobile/tablet */}
       <aside
-        aria-hidden={!drawerOpen}
+        aria-hidden={drawerHidden || undefined}
+        inert={drawerHidden || undefined}
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-gray-900 transition-transform duration-200 lg:translate-x-0 ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}

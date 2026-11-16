@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { apiErrorMessage } from '@/lib/api-error';
 import type { StockMovementType } from '@/lib/types';
 
 const movementTypes: StockMovementType[] = [
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(error) }, { status: 500 });
   }
 
   const { error: updateError } = await supabase
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     .eq('id', item_variant_id);
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(updateError) }, { status: 500 });
   }
 
   return NextResponse.json({ movement: data }, { status: 201 });
