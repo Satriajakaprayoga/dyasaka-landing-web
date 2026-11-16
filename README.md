@@ -8,10 +8,12 @@
 ## Setup
 
 1. Create a Supabase project.
-2. In the Supabase SQL editor run `supabase/schema.sql` (tables, the
-   capacity-tracking trigger, base RLS policies), then every file in
-   `supabase/migrations/` in filename order — later migrations modernize
-   the storage policies and open public booking inserts.
+2. In the Supabase SQL editor (or with the Supabase CLI) run every file in
+   `supabase/migrations/` in filename order. The first file is the initial
+   schema; later ones add inventory, the booking workflow, invoices, the
+   ledger, staff/procurement and the public read policies. Do **not** run
+   `supabase/schema.sql` as well — it is a historical snapshot of the
+   original five-table schema and would collide with the migrations.
 3. Create a Storage bucket named `product-images` (the
    `20261006120000_modernize_storage_policies.sql` migration makes it
    public and adds the policies).
@@ -24,39 +26,46 @@
    ```
 5. `npm install && npm run dev`
 
+Checks: `npm run typecheck`, `npm run lint`, `npm test` (Node's built-in
+runner, no extra dependency) and `npm run build`. CI runs all four on every
+push and pull request from a clean `npm ci`.
+
+Optional dev setting: when opening the dev server through a LAN IP, set
+`ALLOWED_DEV_ORIGINS=172.16.1.25` (comma-separated) so Next 16 allows the
+HMR assets. It is not needed for `next start` or by other machines.
+
 ## Project structure
 
 ```
 app/
-  catalog/               # product grid, category + price filters, search
-  product/[id]/          # detail: gallery + lightbox, WA inquiry, booking modal, availability calendar
-  availability/          # standalone availability calendar page
+  (public)/              # landing, catalog, product/[id], availability
+  offline/               # offline fallback (service worker)
+  invoice/[token]/       # public invoice by private token
   admin/
     login/               # admin sign-in (Supabase Auth)
-    page.tsx             # dashboard home
-    products/            # list + new (with photo upload to Storage)
-    categories/          # CRUD (inline rename, pagination)
-    bookings/            # list + new + edit (status workflow)
-    items/               # inventory: items, variants, stock movements
-  api/admin/
-    products/            # JSON CRUD (session required)
-    categories/          # JSON CRUD (session required)
-    bookings/            # JSON CRUD (session required)
-    items/               # JSON CRUD (session required)
-    item-variants/       # JSON CRUD (session required)
-    stock-movements/     # POST record stock movement
+    (panel)/             # dashboard, products, items, bookings, vendors,
+                         # suppliers, staff, ledger, report, plans, orders,
+                         # categories, settings (sidebar + bottom-nav shell)
+  api/admin/             # JSON CRUD per resource (session required)
 components/
-  AvailabilityCalendar.tsx  # shared read-only calendar, used standalone + embedded
+  landing/               # public page sections
+  admin/                 # admin panels, forms, tables, shared hooks
+  AvailabilityCalendar   # shared read-only calendar, standalone + embedded
 lib/
   supabase.ts            # Supabase client (public/browser)
   supabase-server.ts     # server-side Supabase client (cookie-based auth, admin routes)
   types.ts               # shared TS types matching the DB schema
-  booking-helpers.ts     # date-capacity lookups + WhatsApp inquiry link builder
+  booking-helpers.ts     # date-capacity lookups + WhatsApp link builders
+  revalidate-public.ts   # purges cached public pages after admin writes
 supabase/
-  schema.sql             # full DB schema, trigger, RLS policies
-  migrations/            # incremental SQL migrations (run in filename order)
-middleware.ts             # protects /admin/* — redirects to /admin/login if not signed in
+  migrations/            # source of truth (run in filename order)
+  schema.sql             # historical snapshot of the original schema — do not run
+proxy.ts                 # protects /admin/* — redirects to /admin/login if not signed in
 ```
+
+Deeper references: `docs/ARCHITECTURE.md` (design and data flow),
+`docs/DATABASE_SRUCTURE.md` (schema), `docs/FEATURE_SPECIFICATION.md`
+(feature behavior), `docs/routes/README.md` (every route's doc).
 
 ## How booking + capacity works
 
@@ -69,7 +78,11 @@ Customers can book in two ways:
    `pending`/`not_started`, requires an active product and a future
    date, and there is no public SELECT on `bookings` — visitors can
    create bookings but never read them (migration
-   `20261007120000_public_booking_insert.sql`).
+   `20261007120000_public_booking_insert.sql`). A follow-up trigger
+   (`20261116100000_public_booking_throttle.sql`) caps anonymous inserts at
+   3 pending bookings per phone in 24 hours and rejects a duplicate
+   pending/confirmed booking for the same phone and event date. Admin
+   (authenticated) inserts bypass both limits.
 2. **Admin manual entry** — the classic flow: the customer asks via the
    WhatsApp button (`buildWhatsAppInquiryLink`) or follows up after
    booking, and the admin records/adjusts it under `/admin/bookings`.
